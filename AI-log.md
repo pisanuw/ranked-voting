@@ -1,5 +1,11 @@
 # AI Log — Ranked Voting App
 
+## 2026-04-21T14:46 — Security fix: move VotingPage contest fetch through Netlify function
+
+Move VotingPage's contest fetch through a Netlify function (using service key server-side) and tighten RLS so the anon key cannot read contest rows at all. This prevents enumeration of all open contests and their vote_tokens via the public anon key.
+
+---
+
 ## 2026-04-21T14:44 — Security question: anon key access to contest tables
 
 User asked: "Can anybody use the VITE_SUPABASE_ANON_KEY to read the contest tables?"
