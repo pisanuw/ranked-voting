@@ -94,12 +94,22 @@ export default function AdminContest() {
     const email = newEmail.trim().toLowerCase()
     if (!email.includes('@')) return
     await supabase.from('allowed_voters').insert({ contest_id: id, email })
+    // Whitelist present → login required
+    await supabase.from('contests').update({ require_login: true }).eq('id', id)
     setNewEmail('')
     load()
   }
 
   async function removeAllowedEmail(avId) {
     await supabase.from('allowed_voters').delete().eq('id', avId)
+    // If no more entries, login no longer required
+    const { count } = await supabase
+      .from('allowed_voters')
+      .select('id', { count: 'exact', head: true })
+      .eq('contest_id', id)
+    if (count === 0) {
+      await supabase.from('contests').update({ require_login: false }).eq('id', id)
+    }
     load()
   }
 
@@ -264,7 +274,6 @@ export default function AdminContest() {
               </div>
               <div className="space-y-3">
                 {[
-                  ['require_login',             'Require login to vote'],
                   ['results_visible_to_voters', 'Results visible to all voters'],
                   ['randomize_options',         'Randomize option order per voter'],
                 ].map(([key, label]) => (
@@ -285,7 +294,7 @@ export default function AdminContest() {
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <SettingRow label="Winners" value={contest.max_winners} />
               <SettingRow label="End Date" value={contest.end_date ? format(new Date(contest.end_date), 'PPp') : 'None'} />
-              <SettingRow label="Require Login" value={contest.require_login ? 'Yes' : 'No'} />
+              <SettingRow label="Login Required" value={contest.require_login ? 'Yes (voter whitelist active)' : 'No (URL is enough)'} />
               <SettingRow label="Results Visible" value={contest.results_visible_to_voters ? 'All voters' : 'Admin only'} />
               <SettingRow label="Randomize" value={contest.randomize_options ? 'Yes (per voter)' : 'No'} />
             </dl>

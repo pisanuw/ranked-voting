@@ -10,7 +10,6 @@ export default function CreateContest() {
   const [title, setTitle]                     = useState('')
   const [description, setDescription]         = useState('')
   const [maxWinners, setMaxWinners]            = useState(1)
-  const [requireLogin, setRequireLogin]        = useState(true)
   const [resultsVisible, setResultsVisible]    = useState(true)
   const [randomizeOptions, setRandomize]       = useState(true)
   const [endDate, setEndDate]                  = useState('')
@@ -56,7 +55,8 @@ export default function CreateContest() {
         title:                     title.trim(),
         description:               description.trim() || null,
         max_winners:               maxWinners,
-        require_login:             requireLogin,
+        // require_login is auto-set: true if whitelist provided, false otherwise
+        require_login:             allowedEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@')).length > 0,
         results_visible_to_voters: resultsVisible,
         randomize_options:         randomizeOptions,
         end_date:                  endDate || null,
@@ -168,12 +168,6 @@ export default function CreateContest() {
           <div className="card p-5 space-y-4">
             <h2 className="font-semibold text-slate-800">Voting Settings</h2>
 
-            <Toggle
-              label="Require voters to log in"
-              detail="Voters must sign in with Google or magic link"
-              checked={requireLogin}
-              onChange={setRequireLogin}
-            />
             <Toggle
               label="Show results to all voters"
               detail="If off, only you (the admin) can see results"

@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import IRVRounds from '../components/results/IRVRounds'
 
 export default function ResultsPage() {
   const { token } = useParams()
-  const { user } = useAuth()
 
   const [results, setResults] = useState(null)
   const [pageState, setPageState] = useState('loading') // loading | forbidden | error | ready
 
   useEffect(() => {
     async function load() {
+      // Pass auth token if available (needed for admin-only results)
       const { data: { session } } = await supabase.auth.getSession()
       const authToken = session?.access_token
 
-      const res = await fetch(`/api/get-results?token=${token}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      })
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      const res = await fetch(`/api/get-results?token=${token}`, { headers })
 
       if (res.status === 403) { setPageState('forbidden'); return }
       if (!res.ok)            { setPageState('error'); return }
@@ -27,8 +25,8 @@ export default function ResultsPage() {
       setResults(data)
       setPageState('ready')
     }
-    if (user) load()
-  }, [token, user])
+    load()
+  }, [token])
 
   if (pageState === 'loading') {
     return <Centered><p className="text-slate-400">Loading results…</p></Centered>

@@ -105,34 +105,21 @@ exports.handler = async (event) => {
   }
 
   // ── Authorization ─────────────────────────────────────────────────────
-  let isAdmin  = false
-  let isVoter  = false
-
-  if (authToken) {
+  // Public results: anyone with the vote_token URL can view
+  // Admin-only results: must be logged in as the contest admin
+  if (!contest.results_visible_to_voters) {
+    if (!authToken) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are restricted to the contest admin' }) }
+    }
     const authClient = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
       { global: { headers: { Authorization: `Bearer ${authToken}` } } }
     )
     const { data: { user } } = await authClient.auth.getUser()
-
-    if (user) {
-      isAdmin = contest.admin_id === user.id
-
-      if (!isAdmin && contest.results_visible_to_voters) {
-        const { data: vote } = await db
-          .from('votes')
-          .select('id')
-          .eq('contest_id', contest.id)
-          .eq('voter_id', user.id)
-          .maybeSingle()
-        isVoter = !!vote
-      }
+    if (!user || user.id !== contest.admin_id) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are restricted to the contest admin' }) }
     }
-  }
-
-  if (!isAdmin && !isVoter) {
-    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: you must have voted or be the admin to view results' }) }
   }
 
   // ── Fetch votes ───────────────────────────────────────────────────────

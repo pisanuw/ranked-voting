@@ -24,7 +24,8 @@ export default function App() {
       <Route path="/dashboard"    element={<RequireAuth><Dashboard /></RequireAuth>} />
       <Route path="/contest/new"  element={<RequireAuth><CreateContest /></RequireAuth>} />
       <Route path="/admin/:id"    element={<RequireAuth><AdminContest /></RequireAuth>} />
-      <Route path="/results/:token" element={<RequireAuth><ResultsPage /></RequireAuth>} />
+      {/* Results: auth handled inside the page based on results_visible_to_voters setting */}
+      <Route path="/results/:token" element={<ResultsPage />} />
 
       {/* Voting may or may not require auth — VotingPage handles that check itself */}
       <Route path="/vote/:token"  element={<VotingPage />} />

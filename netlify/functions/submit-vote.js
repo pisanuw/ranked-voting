@@ -54,26 +54,22 @@ exports.handler = async (event) => {
   }
 
   // ── Resolve voter identity ────────────────────────────────────────────
+  // Always try to identify the user if an auth token is provided.
+  // Login is only *required* if there is a voter whitelist.
   let voter_id   = null
   let voterEmail = null
 
-  if (contest.require_login) {
-    if (!auth_token) {
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Authentication required' }) }
-    }
-
-    // Validate the JWT using the anon key client
+  if (auth_token) {
     const authClient = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
       { global: { headers: { Authorization: `Bearer ${auth_token}` } } }
     )
-    const { data: { user }, error: authErr } = await authClient.auth.getUser()
-    if (authErr || !user) {
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Invalid or expired session' }) }
+    const { data: { user } } = await authClient.auth.getUser()
+    if (user) {
+      voter_id   = user.id
+      voterEmail = user.email
     }
-    voter_id   = user.id
-    voterEmail = user.email
   }
 
   // ── Email whitelist check ─────────────────────────────────────────────
