@@ -1,6 +1,12 @@
 # AI Log — Ranked Voting App
 
-## 2026-04-21T00:00 — Initial build instructions
+## 2026-04-21T14:41 — Logging policy update
+
+Record all user instructions in AI-log.md in the project directory. Each entry must include a timestamp with hour and minute. Update this file BEFORE starting any work after receiving an instruction. Do not write any private API keys or secrets to this file — indicate removed information with REDACTED.
+
+---
+
+## 2026-04-21T (session start) — Initial build instructions
 
 Build a ranked voting web app with the following requirements:
 
@@ -46,18 +52,21 @@ Build a ranked voting web app with the following requirements:
 
 ---
 
-## 2026-04-21T01:00 — Deploy to Netlify and Supabase
+## 2026-04-21T (session) — Deploy to Netlify and Supabase
 
 - Install necessary programs
 - Push code to GitHub repo: https://github.com/pisanuw/ranked-voting
 - Deploy to Netlify: ranked-voting.netlify.app
-- Set up Supabase database (project: iatqephvmykbkatpbwll)
+- Set up Supabase database (project ref: REDACTED)
+- Supabase DB password: REDACTED
+- Supabase publishable key: REDACTED
+- Supabase service role key: REDACTED
 - Run schema SQL against Supabase
 - Configure Netlify environment variables
 
 ---
 
-## 2026-04-21T02:00 — Fix Google Auth error
+## 2026-04-21T (session) — Fix Google Auth error
 
 Google Auth giving error: `{"code":400,"error_code":"validation_failed","msg":"Unsupported provider: provider is not enabled"}`
 
@@ -65,7 +74,7 @@ Instruction: fix Google OAuth — need to enable provider in Supabase dashboard 
 
 ---
 
-## 2026-04-21T03:00 — Fix "Database error saving new user"
+## 2026-04-21T (session) — Fix "Database error saving new user"
 
 Magic link login giving: "Database error saving new user"
 
@@ -75,7 +84,7 @@ Fix: add `coalesce(new.email, new.raw_user_meta_data->>'email', '')` and `EXCEPT
 
 ---
 
-## 2026-04-21T04:00 — Rework voting access model
+## 2026-04-21T (session) — Rework voting access model
 
 **New requirements:**
 - Any user with the correct participation URL should be able to vote (no login required by default)
@@ -87,7 +96,7 @@ Fix: add `coalesce(new.email, new.raw_user_meta_data->>'email', '')` and `EXCEPT
 
 ---
 
-## 2026-04-21T05:00 — Fix FK constraint error on contest creation
+## 2026-04-21T (session) — Fix FK constraint error on contest creation
 
 Error: `insert or update on table "contests" violates foreign key constraint "contests_admin_id_fkey"`
 
@@ -98,7 +107,7 @@ Root cause: `profiles` row missing for user (signup trigger failed before fix). 
 
 ---
 
-## 2026-04-21T06:00 — Fix vote submission stuck on "Submitting"
+## 2026-04-21T (session) — Fix vote submission stuck on "Submitting"
 
 Vote page at `/vote/feac19d5ff6a6a284673d116e7e4c175eeea` stuck on "Submitting" forever.
 
@@ -108,7 +117,7 @@ Fix: move `/api/*` redirect before `/*` in `netlify.toml`.
 
 ---
 
-## 2026-04-21T07:00 — Replace IRV with correct STV algorithm
+## 2026-04-21T (session) — Replace IRV with correct STV algorithm
 
 Instruction: review the rounds/voting algorithm against the rankedvote.co description and fix discrepancies.
 
