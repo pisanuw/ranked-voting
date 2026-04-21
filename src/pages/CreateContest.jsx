@@ -47,6 +47,11 @@ export default function CreateContest() {
 
     setSaving(true)
 
+    // Ensure profile exists (self-heal if the signup trigger ever failed)
+    await supabase
+      .from('profiles')
+      .upsert({ id: user.id, email: user.email }, { onConflict: 'id', ignoreDuplicates: true })
+
     // Create contest
     const { data: contest, error: cErr } = await supabase
       .from('contests')
