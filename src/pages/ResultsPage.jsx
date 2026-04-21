@@ -58,7 +58,7 @@ export default function ResultsPage() {
     )
   }
 
-  const { contest, options, total_votes, rounds, winners } = results
+  const { contest, options, total_votes, quota, rounds, winners } = results
 
   const optionMap = Object.fromEntries((options ?? []).map(o => [o.id, o]))
   const winnerOptions = (winners ?? []).map(id => optionMap[id]).filter(Boolean)
@@ -105,7 +105,7 @@ export default function ResultsPage() {
             </div>
 
             {/* IRV simulation */}
-            <IRVRounds rounds={rounds} optionMap={optionMap} totalVotes={total_votes} />
+            <IRVRounds rounds={rounds} optionMap={optionMap} totalVotes={total_votes} quota={quota} />
           </>
         )}
       </main>

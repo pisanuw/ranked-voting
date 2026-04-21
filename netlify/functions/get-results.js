@@ -1,67 +1,99 @@
 const { createClient } = require('@supabase/supabase-js')
 
-// ── IRV Algorithm ─────────────────────────────────────────────────────────────
-// Sequential IRV for multi-winner contests.
-// votes: [{ vote_rankings: [{ option_id, rank }] }]
-// options: [{ id, title, description }]
+// ── STV (Single Transferable Vote) Algorithm ─────────────────────────────────
+// Implements proper ranked-choice voting with:
+//   - Droop quota: floor(total / (winners+1)) + 1
+//   - Excess vote redistribution (fractional transfer)
+//   - Tie-breaking by fewest overall ranking appearances
+//
+// votes:      [{ vote_rankings: [{ option_id, rank }] }]
+// options:    [{ id, title, description }]
 // maxWinners: number
 function runIRV(votes, options, maxWinners) {
-  // Convert votes to ballots: array of option_id strings sorted by rank (asc)
-  const ballots = votes.map(vote =>
-    [...vote.vote_rankings]
-      .sort((a, b) => a.rank - b.rank)
-      .map(r => r.option_id)
-  )
+  const totalBallots = votes.length
+  // Droop quota — minimum votes guaranteed to win a seat
+  const quota = Math.floor(totalBallots / (maxWinners + 1)) + 1
 
-  let remaining = options.map(o => ({ id: o.id, title: o.title }))
+  // Ballots carry fractional weights for surplus redistribution
+  const ballots = votes.map(vote => ({
+    rankings: [...vote.vote_rankings]
+      .sort((a, b) => a.rank - b.rank)
+      .map(r => r.option_id),
+    weight: 1.0,
+  }))
+
+  let remaining = new Set(options.map(o => o.id))
   const winners = []
   const rounds  = []
 
-  while (winners.length < maxWinners && remaining.length > 0) {
-    // Last candidate remaining wins without a round
-    if (remaining.length === 1) {
-      const last = remaining[0]
-      rounds.push({
-        counts:     { [last.id]: ballots.length },
-        total:      ballots.length,
-        winner:     last.id,
-        eliminated: null,
-      })
-      winners.push(last.id)
-      remaining = []
+  // Returns the highest-ranked still-remaining option for a ballot
+  function firstChoice(ballot) {
+    return ballot.rankings.find(id => remaining.has(id))
+  }
+
+  while (winners.length < maxWinners && remaining.size > 0) {
+    // Last candidate standing — wins automatically
+    if (remaining.size === 1) {
+      const lastId = [...remaining][0]
+      const lastCount = ballots.reduce(
+        (s, b) => firstChoice(b) === lastId ? s + b.weight : s, 0
+      )
+      rounds.push({ counts: { [lastId]: lastCount }, quota, winner: lastId, winner_surplus: null, eliminated: null })
+      winners.push(lastId)
+      remaining.delete(lastId)
       break
     }
 
-    // Count first-choice votes among remaining options
-    const remainingIds = new Set(remaining.map(o => o.id))
+    // Count weighted first-choice votes
     const counts = {}
-    for (const o of remaining) counts[o.id] = 0
-
+    for (const id of remaining) counts[id] = 0
     for (const ballot of ballots) {
-      const firstChoice = ballot.find(id => remainingIds.has(id))
-      if (firstChoice !== undefined) counts[firstChoice]++
+      const fc = firstChoice(ballot)
+      if (fc !== undefined) counts[fc] += ballot.weight
     }
 
-    const total     = Object.values(counts).reduce((s, n) => s + n, 0)
-    const threshold = total / 2  // strictly more than 50% wins
-
-    // Find winner (majority)
-    const winnerId = Object.entries(counts).find(([, c]) => c > threshold)?.[0] ?? null
+    // Find a winner (any candidate meeting or exceeding quota)
+    const winnerId = [...remaining].find(id => counts[id] >= quota) ?? null
 
     if (winnerId) {
-      rounds.push({ counts, total, winner: winnerId, eliminated: null })
+      const surplus      = counts[winnerId] - quota
+      const transferRatio = counts[winnerId] > 0 ? surplus / counts[winnerId] : 0
+
+      // Redistribute excess votes at reduced weight to next ranked choice
+      for (const ballot of ballots) {
+        if (firstChoice(ballot) === winnerId) {
+          ballot.weight *= transferRatio
+        }
+      }
+
+      rounds.push({ counts, quota, winner: winnerId, winner_surplus: Math.round(surplus * 100) / 100, eliminated: null })
       winners.push(winnerId)
-      remaining = remaining.filter(o => o.id !== winnerId)
+      remaining.delete(winnerId)
+
     } else {
-      // Eliminate lowest vote-getter (ties: eliminate the one earliest in remaining order)
-      const minCount = Math.min(...Object.values(counts))
-      const loser    = remaining.find(o => counts[o.id] === minCount)
-      rounds.push({ counts, total, winner: null, eliminated: loser.id })
-      remaining = remaining.filter(o => o.id !== loser.id)
+      // Eliminate the lowest vote-getter
+      const minCount = Math.min(...[...remaining].map(id => counts[id]))
+      const tied = [...remaining].filter(id => Math.abs(counts[id] - minCount) < 0.001)
+
+      let loserId
+      if (tied.length === 1) {
+        loserId = tied[0]
+      } else {
+        // Tie-break: eliminate the option with the fewest total ranking appearances
+        const appearances = {}
+        for (const id of tied) {
+          appearances[id] = ballots.filter(b => b.rankings.includes(id)).length
+        }
+        const minAppearances = Math.min(...tied.map(id => appearances[id]))
+        loserId = tied.find(id => appearances[id] === minAppearances) ?? tied[0]
+      }
+
+      rounds.push({ counts, quota, winner: null, winner_surplus: null, eliminated: loserId })
+      remaining.delete(loserId)
     }
   }
 
-  return { winners, rounds }
+  return { winners, rounds, quota }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,8 +181,8 @@ exports.handler = async (event) => {
     }
   }
 
-  // ── Run IRV ───────────────────────────────────────────────────────────
-  const { winners, rounds } = runIRV(votes, options, contest.max_winners)
+  // ── Run STV ───────────────────────────────────────────────────────────
+  const { winners, rounds, quota } = runIRV(votes, options, contest.max_winners)
 
   return {
     statusCode: 200,
@@ -159,6 +191,7 @@ exports.handler = async (event) => {
       contest: { title: contest.title, max_winners: contest.max_winners },
       options,
       total_votes,
+      quota,
       rounds,
       winners,
     }),
