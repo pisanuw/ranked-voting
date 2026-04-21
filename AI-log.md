@@ -1,5 +1,19 @@
 # AI Log — Ranked Voting App
 
+## 2026-04-21T14:44 — Security question: anon key access to contest tables
+
+User asked: "Can anybody use the VITE_SUPABASE_ANON_KEY to read the contest tables?"
+
+Answer: Yes — the anon key is baked into the public JS bundle and anyone can extract it. With the current RLS policies, anyone with the key can enumerate all open contests including their vote_tokens, defeating the URL-as-gate security model. Votes, voter emails, and profiles are protected by RLS. Fix proposed: move VotingPage contest fetch through a Netlify function and tighten RLS to block anon key DB access entirely.
+
+---
+
+## 2026-04-21T14:44 — AI-log compliance check
+
+User asked: "Did you update AI-log.md with my last query?" — confirmed I had not logged the previous entry before responding. Corrected retroactively.
+
+---
+
 ## 2026-04-21T14:41 — Logging policy update
 
 Record all user instructions in AI-log.md in the project directory. Each entry must include a timestamp with hour and minute. Update this file BEFORE starting any work after receiving an instruction. Do not write any private API keys or secrets to this file — indicate removed information with REDACTED.
