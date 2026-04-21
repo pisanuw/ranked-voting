@@ -130,9 +130,12 @@ create policy "Users can update own profile"
 create policy "Admin manages their contests"
   on contests for all using (auth.uid() = admin_id);
 
--- Anyone with the vote_token URL can read open contests (token = 128-bit random hex)
-create policy "Anyone can read open contests"
-  on contests for select using (status = 'open');
+-- Contests are NOT readable via the anon key.
+-- All public reads go through the get-contest Netlify function (service key, server-side)
+-- which only returns a single contest by token — no enumeration possible.
+-- Only authenticated admins can read contests directly.
+create policy "Admin reads own contests"
+  on contests for select using (auth.uid() = admin_id);
 
 -- contest_options: follow parent contest permissions
 create policy "Admin manages options"
@@ -140,10 +143,6 @@ create policy "Admin manages options"
   using (exists (
     select 1 from contests where id = contest_id and admin_id = auth.uid()
   ));
-
-create policy "Anyone can read options of open contests"
-  on contest_options for select
-  using (exists (select 1 from contests where id = contest_id and status = 'open'));
 
 -- allowed_voters: only admin
 create policy "Admin manages allowed voters"

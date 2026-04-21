@@ -48,13 +48,12 @@ export default function VotingPage() {
     if (authLoading) return
 
     async function load() {
-      const { data: c } = await supabase
-        .from('contests')
-        .select('*, contest_options(*)')
-        .eq('vote_token', token)
-        .single()
+      // Fetch contest via server-side function — never uses the anon key for DB reads,
+      // preventing enumeration of all contests by anyone who extracts the anon key.
+      const res = await fetch(`/api/get-contest?token=${token}`)
+      if (!res.ok) { setPageState('notFound'); return }
+      const c = await res.json()
 
-      if (!c) { setPageState('notFound'); return }
       setContest(c)
 
       // Closed?
@@ -75,15 +74,8 @@ export default function VotingPage() {
           .maybeSingle()
         if (existing) { setPageState('alreadyVoted'); return }
 
-        // Check email whitelist
-        const { data: avs } = await supabase
-          .from('allowed_voters')
-          .select('email')
-          .eq('contest_id', c.id)
-        if (avs && avs.length > 0) {
-          const allowed = avs.some(av => av.email.toLowerCase() === user.email.toLowerCase())
-          if (!allowed) { setPageState('notAllowed'); return }
-        }
+        // Whitelist check is enforced server-side in submit-vote;
+        // allowed_voters is admin-only via RLS so we can't read it here anyway.
       } else {
         // Anonymous — check localStorage
         if (hasVoted(c.id)) { setPageState('alreadyVoted'); return }
@@ -93,7 +85,7 @@ export default function VotingPage() {
       const opts = c.contest_options ?? []
       const ordered = c.randomize_options ? shuffle(opts) : [...opts].sort((a, b) => a.order_index - b.order_index)
       setOptions(ordered)
-      setRanked(ordered) // start with shuffled order as initial ranking
+      setRanked(ordered)
       setPageState('open')
     }
 
