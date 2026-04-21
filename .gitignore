@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.netlify/
+
+# environment — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# editor
+.DS_Store
+*.swp
+supabase/.temp/
