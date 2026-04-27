@@ -3,6 +3,10 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import IRVRounds from '../components/results/IRVRounds'
 
+function getAnonymousToken(voteToken) {
+  return localStorage.getItem(`rv_voter_${voteToken}`)
+}
+
 export default function ResultsPage() {
   const { token } = useParams()
 
@@ -15,7 +19,12 @@ export default function ResultsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       const authToken = session?.access_token
 
-      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      const headers = {}
+      if (authToken) headers.Authorization = `Bearer ${authToken}`
+
+      const anonymousToken = getAnonymousToken(token)
+      if (anonymousToken) headers['X-Voter-Token'] = anonymousToken
+
       const res = await fetch(`/api/get-results?token=${token}`, { headers })
 
       if (res.status === 403) { setPageState('forbidden'); return }

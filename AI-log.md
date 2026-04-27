@@ -1,3 +1,5 @@
+# Reminder: Record all user instructions verbatim, EXACTLY as typed by user, in this file before doing any other work or writing any response. Each entry must include a timestamp with `date "+%Y-%m-%dT%H:%M"` and start with "User to Github CoPilot version XXX:". Do not write any private API keys or secrets; use REDACTED.
+
 # AI Log — Ranked Voting App
 
 ## 2026-04-21T14:46 — Security fix: move VotingPage contest fetch through Netlify function
@@ -153,3 +155,51 @@ Instruction: review the rounds/voting algorithm against the rankedvote.co descri
 - Single continuous round sequence for all winners
 - Tie-breaking by fewest total ballot appearances
 - Updated `IRVRounds.jsx` visualization: quota line, surplus overlay, fractional vote counts
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:17: which version of node.js does this repo use
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:26: Examine the code and make a prioritized list of things to fix, update, refactor, etc to follow good software engineering principles.
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:31: OK, go ahead with tackling 1, 2, and 4
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:35: How do I Apply the updated SQL in schema.sql:107-249 to my Supabase
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:40: OK, proceed with the rest of the fixes
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:43: Which lines should be run in Supabase sqp editor
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:46: Getting lots of errors from SQL editor. Give me an SQL file that will delete everything and create things from scratch
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:48: Done. Fix the rest
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:58: generate it
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T20:59: ok, what is next?
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T21:00: generate it
+
+---
+
+User to Github CoPilot version XXX: 2026-04-26T21:03: After "pm run dev" I get a blank page on "http://localhost:5173/"

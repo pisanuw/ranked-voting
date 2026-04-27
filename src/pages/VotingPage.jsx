@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link, Navigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import DragDropBallot from '../components/ballot/DragDropBallot'
+
+function getStorageKey(prefix, voteToken) {
+  return `${prefix}_${voteToken}`
+}
 
 function shuffle(arr) {
   const a = [...arr]
@@ -13,20 +17,20 @@ function shuffle(arr) {
   return a
 }
 
-// Persistent anonymous voter token per contest
-function getAnonymousToken(contestId) {
-  const key = `rv_voter_${contestId}`
+// Persistent anonymous voter token per contest URL
+function getAnonymousToken(voteToken) {
+  const key = getStorageKey('rv_voter', voteToken)
   let token = localStorage.getItem(key)
   if (!token) { token = crypto.randomUUID(); localStorage.setItem(key, token) }
   return token
 }
 
-function hasVoted(contestId) {
-  return !!localStorage.getItem(`rv_voted_${contestId}`)
+function hasVoted(voteToken) {
+  return !!localStorage.getItem(getStorageKey('rv_voted', voteToken))
 }
 
-function markVoted(contestId) {
-  localStorage.setItem(`rv_voted_${contestId}`, '1')
+function markVoted(voteToken) {
+  localStorage.setItem(getStorageKey('rv_voted', voteToken), '1')
 }
 
 export default function VotingPage() {
@@ -78,7 +82,7 @@ export default function VotingPage() {
         // allowed_voters is admin-only via RLS so we can't read it here anyway.
       } else {
         // Anonymous — check localStorage
-        if (hasVoted(c.id)) { setPageState('alreadyVoted'); return }
+        if (hasVoted(token)) { setPageState('alreadyVoted'); return }
       }
 
       // Prepare ballot
@@ -106,7 +110,7 @@ export default function VotingPage() {
     const body = {
       contest_vote_token: token,
       rankings: ranked.map((opt, i) => ({ option_id: opt.id, rank: i + 1 })),
-      voter_token: user ? null : getAnonymousToken(contest.id),
+      voter_token: user ? null : getAnonymousToken(token),
       auth_token:  authToken,
     }
 
@@ -120,11 +124,15 @@ export default function VotingPage() {
     setSubmitting(false)
 
     if (!res.ok) {
+      if (res.status === 403) {
+        setPageState('notAllowed')
+        return
+      }
       setSubmitError(data.error ?? 'Failed to submit vote. Please try again.')
       return
     }
 
-    if (!user) markVoted(contest.id)
+    if (!user) markVoted(token)
     setPageState('submitted')
   }
 

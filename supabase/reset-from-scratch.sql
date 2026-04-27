@@ -1,32 +1,49 @@
 -- ============================================================
--- Ranked Voting — Supabase Schema
--- Run this in your Supabase SQL editor (Dashboard → SQL Editor)
+-- Ranked Voting — FULL RESET (DESTRUCTIVE)
+-- Drops all app tables/functions/triggers/policies and recreates from scratch.
 -- ============================================================
 
--- Extensions
+begin;
+
+-- ------------------------------------------------------------
+-- DROP EXISTING OBJECTS
+-- ------------------------------------------------------------
+
+drop trigger if exists on_allowed_voters_changed on public.allowed_voters;
+drop function if exists public.sync_contest_require_login_from_whitelist();
+
+drop function if exists public.submit_vote_with_rankings(uuid, uuid, text, jsonb);
+drop function if exists public.create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]);
+
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user();
+
+drop table if exists public.vote_rankings cascade;
+drop table if exists public.votes cascade;
+drop table if exists public.allowed_voters cascade;
+drop table if exists public.contest_options cascade;
+drop table if exists public.contests cascade;
+drop table if exists public.profiles cascade;
+
+-- ------------------------------------------------------------
+-- CREATE BASE OBJECTS
+-- ------------------------------------------------------------
+
 create extension if not exists "pgcrypto";
 
--- ============================================================
--- TABLES
--- ============================================================
-
--- Profiles: mirrors auth.users, created automatically on signup
-create table if not exists profiles (
+create table public.profiles (
   id         uuid primary key references auth.users(id) on delete cascade,
   email      text not null,
   created_at timestamptz default now()
 );
 
--- Contests
-create table if not exists contests (
+create table public.contests (
   id                        uuid primary key default gen_random_uuid(),
-  admin_id                  uuid not null references profiles(id) on delete cascade,
+  admin_id                  uuid not null references public.profiles(id) on delete cascade,
   title                     text not null,
   description               text,
-  -- shareable token for voting/results URLs (never the contest id)
   vote_token                text unique not null default encode(gen_random_bytes(18), 'hex'),
   max_winners               integer not null default 1 check (max_winners >= 1),
-  -- denormalized cache of whitelist state (maintained by trigger below)
   require_login             boolean not null default true,
   results_visible_to_voters boolean not null default true,
   randomize_options         boolean not null default true,
@@ -36,58 +53,51 @@ create table if not exists contests (
   created_at                timestamptz default now()
 );
 
--- Contest options/candidates
-create table if not exists contest_options (
+create table public.contest_options (
   id          uuid primary key default gen_random_uuid(),
-  contest_id  uuid not null references contests(id) on delete cascade,
+  contest_id  uuid not null references public.contests(id) on delete cascade,
   title       text not null,
   description text,
   order_index integer not null default 0,
   created_at  timestamptz default now()
 );
 
--- Allowed voter emails (whitelist). If no rows for a contest, anyone with the voting URL may vote.
-create table if not exists allowed_voters (
+create table public.allowed_voters (
   id         uuid primary key default gen_random_uuid(),
-  contest_id uuid not null references contests(id) on delete cascade,
+  contest_id uuid not null references public.contests(id) on delete cascade,
   email      text not null,
   created_at timestamptz default now(),
   unique (contest_id, email)
 );
 
--- Votes (one per voter per contest)
-create table if not exists votes (
+create table public.votes (
   id           uuid primary key default gen_random_uuid(),
-  contest_id   uuid not null references contests(id) on delete cascade,
-  voter_id     uuid references profiles(id),        -- null for anonymous
-  voter_token  text,                                -- anonymous browser token
+  contest_id   uuid not null references public.contests(id) on delete cascade,
+  voter_id     uuid references public.profiles(id),
+  voter_token  text,
   created_at   timestamptz default now(),
-  -- prevent double-voting
   unique (contest_id, voter_id),
   unique (contest_id, voter_token),
-  -- must have at least one identifier
   constraint votes_has_identifier check (voter_id is not null or voter_token is not null)
 );
 
--- Vote rankings (the actual ballot)
-create table if not exists vote_rankings (
+create table public.vote_rankings (
   id        uuid primary key default gen_random_uuid(),
-  vote_id   uuid not null references votes(id) on delete cascade,
-  option_id uuid not null references contest_options(id) on delete cascade,
+  vote_id   uuid not null references public.votes(id) on delete cascade,
+  option_id uuid not null references public.contest_options(id) on delete cascade,
   rank      integer not null check (rank >= 1),
   unique (vote_id, option_id),
   unique (vote_id, rank)
 );
 
--- ============================================================
--- TRIGGERS
--- ============================================================
+-- ------------------------------------------------------------
+-- TRIGGERS + FUNCTIONS
+-- ------------------------------------------------------------
 
--- Auto-create profile on new user signup
-create or replace function handle_new_user()
+create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
-  insert into profiles (id, email)
+  insert into public.profiles (id, email)
   values (
     new.id,
     coalesce(new.email, new.raw_user_meta_data->>'email', '')
@@ -95,18 +105,15 @@ begin
   on conflict (id) do nothing;
   return new;
 exception when others then
-  -- Never block user creation even if profile insert fails
   return new;
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure handle_new_user();
+  for each row execute procedure public.handle_new_user();
 
--- Keep contests.require_login synchronized with whitelist presence.
-create or replace function sync_contest_require_login_from_whitelist()
+create or replace function public.sync_contest_require_login_from_whitelist()
 returns trigger language plpgsql security definer as $$
 declare
   v_contest_id uuid;
@@ -116,10 +123,10 @@ begin
     return coalesce(new, old);
   end if;
 
-  update contests c
+  update public.contests c
   set require_login = exists (
     select 1
-    from allowed_voters av
+    from public.allowed_voters av
     where av.contest_id = c.id
   )
   where c.id = v_contest_id;
@@ -128,16 +135,11 @@ begin
 end;
 $$;
 
-drop trigger if exists on_allowed_voters_changed on allowed_voters;
 create trigger on_allowed_voters_changed
-  after insert or update or delete on allowed_voters
-  for each row execute procedure sync_contest_require_login_from_whitelist();
+  after insert or update or delete on public.allowed_voters
+  for each row execute procedure public.sync_contest_require_login_from_whitelist();
 
--- ============================================================
--- RPC FUNCTIONS
--- ============================================================
-
-create or replace function create_contest_with_relations(
+create or replace function public.create_contest_with_relations(
   p_title text,
   p_description text,
   p_max_winners integer,
@@ -189,7 +191,7 @@ begin
     raise exception 'Number of winners must be less than the number of options';
   end if;
 
-  insert into profiles (id, email)
+  insert into public.profiles (id, email)
   select
     u.id,
     coalesce(u.email, u.raw_user_meta_data->>'email', '')
@@ -198,7 +200,7 @@ begin
   on conflict (id) do update
     set email = excluded.email;
 
-  insert into contests (
+  insert into public.contests (
     admin_id,
     title,
     description,
@@ -229,7 +231,7 @@ begin
       continue;
     end if;
 
-    insert into contest_options (contest_id, title, description, order_index)
+    insert into public.contest_options (contest_id, title, description, order_index)
     values (
       v_contest_id,
       btrim(v_option->>'title'),
@@ -247,7 +249,7 @@ begin
       continue;
     end if;
 
-    insert into allowed_voters (contest_id, email)
+    insert into public.allowed_voters (contest_id, email)
     values (v_contest_id, v_email)
     on conflict (contest_id, email) do nothing;
   end loop;
@@ -256,7 +258,7 @@ begin
 end;
 $$;
 
-create or replace function submit_vote_with_rankings(
+create or replace function public.submit_vote_with_rankings(
   p_contest_id uuid,
   p_voter_id uuid,
   p_voter_token text,
@@ -283,7 +285,7 @@ begin
   end if;
 
   if p_voter_id is not null then
-    insert into profiles (id, email)
+    insert into public.profiles (id, email)
     select
       u.id,
       coalesce(u.email, u.raw_user_meta_data->>'email', '')
@@ -293,7 +295,7 @@ begin
       set email = excluded.email;
   end if;
 
-  insert into votes (contest_id, voter_id, voter_token)
+  insert into public.votes (contest_id, voter_id, voter_token)
   values (
     p_contest_id,
     p_voter_id,
@@ -301,7 +303,7 @@ begin
   )
   returning id into v_vote_id;
 
-  insert into vote_rankings (vote_id, option_id, rank)
+  insert into public.vote_rankings (vote_id, option_id, rank)
   select
     v_vote_id,
     (ranking->>'option_id')::uuid,
@@ -312,85 +314,80 @@ begin
 end;
 $$;
 
-revoke all on function create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) from public;
-grant execute on function create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
+-- ------------------------------------------------------------
+-- FUNCTION PERMISSIONS
+-- ------------------------------------------------------------
 
-revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb) from public;
-revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb) from anon;
-revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb) from authenticated;
-grant execute on function submit_vote_with_rankings(uuid, uuid, text, jsonb) to service_role;
+revoke all on function public.create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) from public;
+grant execute on function public.create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
 
--- ============================================================
--- ROW LEVEL SECURITY
--- ============================================================
+revoke all on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) from public;
+revoke all on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) from anon;
+revoke all on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) from authenticated;
+grant execute on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) to service_role;
 
-alter table profiles         enable row level security;
-alter table contests         enable row level security;
-alter table contest_options  enable row level security;
-alter table allowed_voters   enable row level security;
-alter table votes            enable row level security;
-alter table vote_rankings    enable row level security;
+-- ------------------------------------------------------------
+-- RLS + POLICIES
+-- ------------------------------------------------------------
 
--- profiles
+alter table public.profiles         enable row level security;
+alter table public.contests         enable row level security;
+alter table public.contest_options  enable row level security;
+alter table public.allowed_voters   enable row level security;
+alter table public.votes            enable row level security;
+alter table public.vote_rankings    enable row level security;
+
 create policy "Users can view own profile"
-  on profiles for select using (auth.uid() = id);
+  on public.profiles for select using (auth.uid() = id);
 
 create policy "Users can insert own profile"
-  on profiles for insert with check (auth.uid() = id);
+  on public.profiles for insert with check (auth.uid() = id);
 
 create policy "Users can update own profile"
-  on profiles for update using (auth.uid() = id);
+  on public.profiles for update using (auth.uid() = id);
 
--- contests: admin full access
--- (the Netlify functions use the service key and bypass RLS)
 create policy "Admin manages their contests"
-  on contests for all using (auth.uid() = admin_id);
+  on public.contests for all using (auth.uid() = admin_id);
 
--- Contests are NOT readable via the anon key.
--- All public reads go through the get-contest Netlify function (service key, server-side)
--- which only returns a single contest by token — no enumeration possible.
--- Only authenticated admins can read contests directly.
 create policy "Admin reads own contests"
-  on contests for select using (auth.uid() = admin_id);
+  on public.contests for select using (auth.uid() = admin_id);
 
--- contest_options: follow parent contest permissions
 create policy "Admin manages options"
-  on contest_options for all
+  on public.contest_options for all
   using (exists (
-    select 1 from contests where id = contest_id and admin_id = auth.uid()
+    select 1 from public.contests where id = contest_id and admin_id = auth.uid()
   ));
 
--- allowed_voters: only admin
 create policy "Admin manages allowed voters"
-  on allowed_voters for all
+  on public.allowed_voters for all
   using (exists (
-    select 1 from contests where id = contest_id and admin_id = auth.uid()
+    select 1 from public.contests where id = contest_id and admin_id = auth.uid()
   ));
 
--- votes & vote_rankings: Netlify functions handle inserts via service key;
--- allow admin to read their contest's votes
 create policy "Admin reads votes"
-  on votes for select
+  on public.votes for select
   using (exists (
-    select 1 from contests where id = contest_id and admin_id = auth.uid()
+    select 1 from public.contests where id = contest_id and admin_id = auth.uid()
   ));
 
 create policy "Admin reads vote rankings"
-  on vote_rankings for select
+  on public.vote_rankings for select
   using (exists (
-    select 1 from votes v
-    join contests c on c.id = v.contest_id
+    select 1 from public.votes v
+    join public.contests c on c.id = v.contest_id
     where v.id = vote_id and c.admin_id = auth.uid()
   ));
 
--- ============================================================
+-- ------------------------------------------------------------
 -- INDEXES
--- ============================================================
+-- ------------------------------------------------------------
 
-create index if not exists idx_contests_admin_id    on contests(admin_id);
-create index if not exists idx_contests_vote_token  on contests(vote_token);
-create index if not exists idx_contests_status      on contests(status);
-create index if not exists idx_options_contest_id   on contest_options(contest_id);
-create index if not exists idx_allowed_contest_id   on allowed_voters(contest_id);
-create index if not exists idx_votes_contest_id     on votes(contest_id);
-create index if not exists idx_rankings_vote_id     on vote_rankings(vote_id);
+create index if not exists idx_contests_admin_id    on public.contests(admin_id);
+create index if not exists idx_contests_vote_token  on public.contests(vote_token);
+create index if not exists idx_contests_status      on public.contests(status);
+create index if not exists idx_options_contest_id   on public.contest_options(contest_id);
+create index if not exists idx_allowed_contest_id   on public.allowed_voters(contest_id);
+create index if not exists idx_votes_contest_id     on public.votes(contest_id);
+create index if not exists idx_rankings_vote_id     on public.vote_rankings(vote_id);
+
+commit;

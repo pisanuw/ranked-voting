@@ -68,7 +68,7 @@ supabase/
 - **profiles** — mirrors `auth.users`, auto-created on signup
 - **contests** — one row per contest; includes a random `vote_token` used in all public URLs
 - **contest_options** — candidates for a contest
-- **allowed_voters** — optional email whitelist; if empty, anyone logged in may vote
+- **allowed_voters** — optional email whitelist; if empty, anyone with the voting URL may vote
 - **votes** — one row per voter per contest; supports both authenticated (`voter_id`) and anonymous (`voter_token`) voters
 - **vote_rankings** — the actual ranked ballot, one row per candidate per vote
 

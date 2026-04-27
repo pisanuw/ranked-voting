@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -13,14 +13,15 @@ const STATUS_COLORS = {
 export default function AdminContest() {
   const { id } = useParams()
   const { user } = useAuth()
-  const navigate = useNavigate()
 
   const [contest, setContest]       = useState(null)
   const [options, setOptions]       = useState([])
   const [allowed, setAllowed]       = useState([])
   const [voteCount, setVoteCount]   = useState(0)
   const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState('')
+  const [loadError, setLoadError]   = useState('')
+  const [actionError, setActionError] = useState('')
+  const [notice, setNotice]         = useState('')
 
   // Editing state
   const [editMode, setEditMode]     = useState(false)
@@ -30,6 +31,7 @@ export default function AdminContest() {
   const [saving, setSaving]         = useState(false)
 
   const load = useCallback(async () => {
+    setLoadError('')
     const { data: c, error: cErr } = await supabase
       .from('contests')
       .select('*')
@@ -37,7 +39,7 @@ export default function AdminContest() {
       .eq('admin_id', user.id)
       .single()
 
-    if (cErr || !c) { setError('Contest not found or access denied.'); setLoading(false); return }
+    if (cErr || !c) { setLoadError('Contest not found or access denied.'); setLoading(false); return }
 
     const [{ data: opts }, { data: avs }, { count }] = await Promise.all([
       supabase.from('contest_options').select('*').eq('contest_id', id).order('order_index'),
@@ -53,7 +55,6 @@ export default function AdminContest() {
       title:                     c.title,
       description:               c.description ?? '',
       max_winners:               c.max_winners,
-      require_login:             c.require_login,
       results_visible_to_voters: c.results_visible_to_voters,
       randomize_options:         c.randomize_options,
       end_date:                  c.end_date ? format(new Date(c.end_date), "yyyy-MM-dd'T'HH:mm") : '',
@@ -65,6 +66,14 @@ export default function AdminContest() {
 
   async function saveSettings(e) {
     e.preventDefault()
+    setActionError('')
+    setNotice('')
+
+    if (Number(editData.max_winners) >= options.length) {
+      setActionError('Number of winners must be less than the number of options.')
+      return
+    }
+
     setSaving(true)
     const { error } = await supabase
       .from('contests')
@@ -72,76 +81,110 @@ export default function AdminContest() {
         title:                     editData.title,
         description:               editData.description || null,
         max_winners:               editData.max_winners,
-        require_login:             editData.require_login,
         results_visible_to_voters: editData.results_visible_to_voters,
         randomize_options:         editData.randomize_options,
         end_date:                  editData.end_date || null,
       })
       .eq('id', id)
     setSaving(false)
-    if (error) { alert(error.message); return }
+    if (error) { setActionError(error.message); return }
     setEditMode(false)
+    setNotice('Settings saved.')
     load()
   }
 
   async function setStatus(status) {
-    if (!confirm(`Set contest to "${status}"?`)) return
-    await supabase.from('contests').update({ status }).eq('id', id)
+    setActionError('')
+    setNotice('')
+    const { error } = await supabase.from('contests').update({ status }).eq('id', id)
+    if (error) {
+      setActionError(error.message)
+      return
+    }
+    setNotice(`Contest set to ${status}.`)
     load()
   }
 
   async function addAllowedEmail() {
+    setActionError('')
+    setNotice('')
     const email = newEmail.trim().toLowerCase()
-    if (!email.includes('@')) return
-    await supabase.from('allowed_voters').insert({ contest_id: id, email })
-    // Whitelist present → login required
-    await supabase.from('contests').update({ require_login: true }).eq('id', id)
+    if (!email.includes('@')) {
+      setActionError('Please enter a valid email address.')
+      return
+    }
+
+    const { error } = await supabase.from('allowed_voters').insert({ contest_id: id, email })
+    if (error) {
+      setActionError(error.message)
+      return
+    }
+
     setNewEmail('')
+    setNotice('Whitelist updated.')
     load()
   }
 
   async function removeAllowedEmail(avId) {
-    await supabase.from('allowed_voters').delete().eq('id', avId)
-    // If no more entries, login no longer required
-    const { count } = await supabase
-      .from('allowed_voters')
-      .select('id', { count: 'exact', head: true })
-      .eq('contest_id', id)
-    if (count === 0) {
-      await supabase.from('contests').update({ require_login: false }).eq('id', id)
+    setActionError('')
+    setNotice('')
+    const { error } = await supabase.from('allowed_voters').delete().eq('id', avId)
+    if (error) {
+      setActionError(error.message)
+      return
     }
+    setNotice('Whitelist updated.')
     load()
   }
 
   async function addOption() {
+    setActionError('')
+    setNotice('')
     const title = newOption.trim()
     if (!title) return
-    if (contest.status !== 'draft') { alert('Cannot add options after contest has opened.'); return }
-    await supabase.from('contest_options').insert({
+    if (contest.status !== 'draft') { setActionError('Cannot add options after contest has opened.'); return }
+    const { error } = await supabase.from('contest_options').insert({
       contest_id: id, title, order_index: options.length
     })
+    if (error) {
+      setActionError(error.message)
+      return
+    }
     setNewOption('')
+    setNotice('Option added.')
     load()
   }
 
   async function removeOption(optId) {
-    if (contest.status !== 'draft') { alert('Cannot remove options after contest has opened.'); return }
-    if (options.length <= 2) { alert('A contest needs at least 2 options.'); return }
-    if (!confirm('Remove this option?')) return
-    await supabase.from('contest_options').delete().eq('id', optId)
+    setActionError('')
+    setNotice('')
+    if (contest.status !== 'draft') { setActionError('Cannot remove options after contest has opened.'); return }
+    if (options.length <= 2) { setActionError('A contest needs at least 2 options.'); return }
+    const { error } = await supabase.from('contest_options').delete().eq('id', optId)
+    if (error) {
+      setActionError(error.message)
+      return
+    }
+    setNotice('Option removed.')
     load()
   }
 
   const voteUrl    = `${window.location.origin}/vote/${contest?.vote_token}`
   const resultsUrl = `${window.location.origin}/results/${contest?.vote_token}`
 
-  function copyToClipboard(text) {
-    navigator.clipboard.writeText(text)
-    alert('Copied to clipboard!')
+  async function copyToClipboard(text) {
+    setActionError('')
+    setNotice('')
+    try {
+      await navigator.clipboard.writeText(text)
+      setNotice('Copied to clipboard.')
+    } catch {
+      setActionError('Could not copy to clipboard. Please copy manually.')
+    }
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading…</div>
-  if (error)   return <div className="min-h-screen flex items-center justify-center text-red-500">{error}</div>
+  if (loadError)   return <div className="min-h-screen flex items-center justify-center text-red-500">{loadError}</div>
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -152,6 +195,9 @@ export default function AdminContest() {
       </nav>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        {actionError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{actionError}</p>}
+        {notice && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">{notice}</p>}
+
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -220,7 +266,7 @@ export default function AdminContest() {
             <h2 className="font-semibold text-slate-800">Voter Whitelist</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {allowed.length === 0
-                ? 'Open to any logged-in user.'
+                ? 'Open to anyone with the voting URL.'
                 : `${allowed.length} email${allowed.length !== 1 ? 's' : ''} allowed.`}
             </p>
           </div>

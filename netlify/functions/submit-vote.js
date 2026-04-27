@@ -128,36 +128,21 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'No voter identity provided' }) }
   }
 
-  // ── Insert vote ───────────────────────────────────────────────────────
-  const { data: vote, error: vErr } = await db
-    .from('votes')
-    .insert({
-      contest_id:  contest.id,
-      voter_id:    voter_id,
-      voter_token: voter_id ? null : voter_token,
-    })
-    .select('id')
-    .single()
+  const { error: submitErr } = await db.rpc('submit_vote_with_rankings', {
+    p_contest_id: contest.id,
+    p_voter_id: voter_id,
+    p_voter_token: voter_id ? null : voter_token,
+    p_rankings: rankings,
+  })
 
-  if (vErr) {
-    console.error('Vote insert error:', vErr)
+  if (submitErr) {
+    console.error('Vote submission error:', submitErr)
+
+    if (submitErr.code === '23505') {
+      return { statusCode: 409, headers, body: JSON.stringify({ error: 'You have already voted in this contest' }) }
+    }
+
     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to record vote' }) }
-  }
-
-  // ── Insert rankings ───────────────────────────────────────────────────
-  const { error: rErr } = await db
-    .from('vote_rankings')
-    .insert(rankings.map(r => ({
-      vote_id:   vote.id,
-      option_id: r.option_id,
-      rank:      r.rank,
-    })))
-
-  if (rErr) {
-    // Roll back the vote row
-    await db.from('votes').delete().eq('id', vote.id)
-    console.error('Rankings insert error:', rErr)
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to record rankings' }) }
   }
 
   return { statusCode: 200, headers, body: JSON.stringify({ success: true }) }

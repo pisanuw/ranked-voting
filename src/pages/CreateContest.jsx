@@ -36,6 +36,11 @@ export default function CreateContest() {
     setError('')
 
     const validOptions = options.filter(o => o.title.trim())
+    const emails = allowedEmails
+      .split(/[\n,]+/)
+      .map(e => e.trim().toLowerCase())
+      .filter(e => e.includes('@'))
+
     if (validOptions.length < 2) {
       setError('At least 2 options are required.')
       return
@@ -47,59 +52,28 @@ export default function CreateContest() {
 
     setSaving(true)
 
-    // Ensure profile exists (self-heal if the signup trigger ever failed)
-    await supabase
-      .from('profiles')
-      .upsert({ id: user.id, email: user.email }, { onConflict: 'id', ignoreDuplicates: true })
+    const { data: contestId, error: createErr } = await supabase.rpc('create_contest_with_relations', {
+      p_title: title.trim(),
+      p_description: description.trim() || null,
+      p_max_winners: maxWinners,
+      p_results_visible_to_voters: resultsVisible,
+      p_randomize_options: randomizeOptions,
+      p_end_date: endDate || null,
+      p_options: validOptions.map((o) => ({
+        title: o.title.trim(),
+        description: o.description.trim() || null,
+      })),
+      p_allowed_emails: emails,
+    })
 
-    // Create contest
-    const { data: contest, error: cErr } = await supabase
-      .from('contests')
-      .insert({
-        admin_id:                  user.id,
-        title:                     title.trim(),
-        description:               description.trim() || null,
-        max_winners:               maxWinners,
-        // require_login is auto-set: true if whitelist provided, false otherwise
-        require_login:             allowedEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@')).length > 0,
-        results_visible_to_voters: resultsVisible,
-        randomize_options:         randomizeOptions,
-        end_date:                  endDate || null,
-        status:                    'draft',
-      })
-      .select()
-      .single()
+    setSaving(false)
 
-    if (cErr) { setError(cErr.message); setSaving(false); return }
-
-    // Insert options
-    const { error: oErr } = await supabase
-      .from('contest_options')
-      .insert(
-        validOptions.map((o, i) => ({
-          contest_id:  contest.id,
-          title:       o.title.trim(),
-          description: o.description.trim() || null,
-          order_index: i,
-        }))
-      )
-
-    if (oErr) { setError(oErr.message); setSaving(false); return }
-
-    // Insert allowed voters if provided
-    const emails = allowedEmails
-      .split(/[\n,]+/)
-      .map(e => e.trim().toLowerCase())
-      .filter(e => e.includes('@'))
-
-    if (emails.length > 0) {
-      const { error: vErr } = await supabase
-        .from('allowed_voters')
-        .insert(emails.map(email => ({ contest_id: contest.id, email })))
-      if (vErr) { setError(vErr.message); setSaving(false); return }
+    if (createErr) {
+      setError(createErr.message)
+      return
     }
 
-    navigate(`/admin/${contest.id}`)
+    navigate(`/admin/${contestId}`)
   }
 
   return (
@@ -192,7 +166,7 @@ export default function CreateContest() {
             <div>
               <h2 className="font-semibold text-slate-800">Voter Email Whitelist</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Leave empty to allow any logged-in user. When filled, only these emails may vote.
+                Leave empty to allow anyone with the voting URL. When filled, only these emails may vote.
               </p>
             </div>
             <div className="field">

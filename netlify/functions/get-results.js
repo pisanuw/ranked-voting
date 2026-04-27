@@ -32,24 +32,32 @@ function runIRV(votes, options, maxWinners) {
   }
 
   while (winners.length < maxWinners && remaining.size > 0) {
-    // Last candidate standing — wins automatically
-    if (remaining.size === 1) {
-      const lastId = [...remaining][0]
-      const lastCount = ballots.reduce(
-        (s, b) => firstChoice(b) === lastId ? s + b.weight : s, 0
-      )
-      rounds.push({ counts: { [lastId]: lastCount }, quota, winner: lastId, winner_surplus: null, eliminated: null })
-      winners.push(lastId)
-      remaining.delete(lastId)
-      break
-    }
-
     // Count weighted first-choice votes
     const counts = {}
     for (const id of remaining) counts[id] = 0
     for (const ballot of ballots) {
       const fc = firstChoice(ballot)
       if (fc !== undefined) counts[fc] += ballot.weight
+    }
+
+    const seatsRemaining = maxWinners - winners.length
+
+    // If the remaining candidates exactly fill the remaining seats,
+    // they are all elected without further eliminations.
+    if (remaining.size <= seatsRemaining) {
+      const orderedRemaining = [...remaining].sort((a, b) => counts[b] - counts[a])
+      for (const candidateId of orderedRemaining) {
+        rounds.push({
+          counts,
+          quota,
+          winner: candidateId,
+          winner_surplus: null,
+          eliminated: null,
+          auto_elected: true,
+        })
+        winners.push(candidateId)
+      }
+      break
     }
 
     // Find a winner (any candidate meeting or exceeding quota)
@@ -101,11 +109,24 @@ function runIRV(votes, options, maxWinners) {
 const supabaseAdmin = () =>
   createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
+async function getAuthenticatedUser(authToken) {
+  if (!authToken) return null
+
+  const authClient = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+    { global: { headers: { Authorization: `Bearer ${authToken}` } } }
+  )
+
+  const { data: { user } } = await authClient.auth.getUser()
+  return user ?? null
+}
+
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Voter-Token',
   }
 
   if (event.httpMethod === 'OPTIONS') {
@@ -115,9 +136,10 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
 
-  const token     = event.queryStringParameters?.token
-  const authHeader = event.headers['authorization'] ?? ''
-  const authToken  = authHeader.replace('Bearer ', '').trim() || null
+  const token = event.queryStringParameters?.token
+  const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
+  const authToken = authHeader.replace('Bearer ', '').trim() || null
+  const anonymousVoterToken = event.headers['x-voter-token'] ?? event.headers['X-Voter-Token'] ?? null
 
   if (!token) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing token parameter' }) }
@@ -137,20 +159,41 @@ exports.handler = async (event) => {
   }
 
   // ── Authorization ─────────────────────────────────────────────────────
-  // Public results: anyone with the vote_token URL can view
-  // Admin-only results: must be logged in as the contest admin
-  if (!contest.results_visible_to_voters) {
-    if (!authToken) {
-      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are restricted to the contest admin' }) }
+  // Admin-only results: only the admin may view.
+  // Voter-visible results: admin may always view; everyone else must prove they voted.
+  const user = await getAuthenticatedUser(authToken)
+  const isAdmin = user?.id === contest.admin_id
+
+  if (!contest.results_visible_to_voters && !isAdmin) {
+    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are restricted to the contest admin' }) }
+  }
+
+  if (contest.results_visible_to_voters && !isAdmin) {
+    let voterQuery = null
+
+    if (user?.id) {
+      voterQuery = db
+        .from('votes')
+        .select('id')
+        .eq('contest_id', contest.id)
+        .eq('voter_id', user.id)
+        .maybeSingle()
+    } else if (anonymousVoterToken) {
+      voterQuery = db
+        .from('votes')
+        .select('id')
+        .eq('contest_id', contest.id)
+        .eq('voter_token', anonymousVoterToken)
+        .maybeSingle()
     }
-    const authClient = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: `Bearer ${authToken}` } } }
-    )
-    const { data: { user } } = await authClient.auth.getUser()
-    if (!user || user.id !== contest.admin_id) {
-      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are restricted to the contest admin' }) }
+
+    if (!voterQuery) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are only available to recorded voters or the contest admin' }) }
+    }
+
+    const { data: recordedVote } = await voterQuery
+    if (!recordedVote) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are only available to recorded voters or the contest admin' }) }
     }
   }
 
