@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -47,6 +47,7 @@ export default function VotingPage() {
   // Magic link state (inline mini-login)
   const [magicEmail, setMagicEmail]   = useState('')
   const [magicSent, setMagicSent]     = useState(false)
+  const ballotInitialized             = useRef(false)
 
   useEffect(() => {
     if (authLoading) return
@@ -85,11 +86,32 @@ export default function VotingPage() {
         if (hasVoted(token)) { setPageState('alreadyVoted'); return }
       }
 
-      // Prepare ballot
-      const opts = c.contest_options ?? []
-      const ordered = c.randomize_options ? shuffle(opts) : [...opts].sort((a, b) => a.order_index - b.order_index)
-      setOptions(ordered)
-      setRanked(ordered)
+      // Prepare ballot: sort/shuffle once, then persist the order so
+      // re-renders (e.g. auth state changes) never re-shuffle.
+      if (!ballotInitialized.current) {
+        const opts = c.contest_options ?? []
+        const orderKey = getStorageKey('rv_order', token)
+        const savedOrder = localStorage.getItem(orderKey)
+        let ordered
+
+        if (savedOrder) {
+          const savedIds = JSON.parse(savedOrder)
+          const optsById = Object.fromEntries(opts.map(o => [o.id, o]))
+          ordered = savedIds.map(id => optsById[id]).filter(Boolean)
+          if (ordered.length !== opts.length) ordered = null
+        }
+
+        if (!ordered) {
+          ordered = c.randomize_options
+            ? shuffle(opts)
+            : [...opts].sort((a, b) => a.order_index - b.order_index)
+          localStorage.setItem(orderKey, JSON.stringify(ordered.map(o => o.id)))
+        }
+
+        setOptions(ordered)
+        setRanked(ordered)
+        ballotInitialized.current = true
+      }
       setPageState('open')
     }
 
