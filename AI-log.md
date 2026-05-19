@@ -2,6 +2,14 @@
 
 # AI Log — Ranked Voting App
 
+## 2026-05-19T11:27 — Do not re-sort options on every render
+
+User: "Do not re-sort options. Only sort them once at the beginning for each user"
+
+Fix: the ballot options should be shuffled/sorted once when the contest loads, not re-shuffled on every React re-render or state change.
+
+---
+
 ## 2026-04-21T14:46 — Security fix: move VotingPage contest fetch through Netlify function
 
 Move VotingPage's contest fetch through a Netlify function (using service key server-side) and tighten RLS so the anon key cannot read contest rows at all. This prevents enumeration of all open contests and their vote_tokens via the public anon key.
