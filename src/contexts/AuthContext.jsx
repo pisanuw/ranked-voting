@@ -22,16 +22,16 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signInWithGoogle = () =>
+  const signInWithGoogle = (redirectTo) =>
     supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/dashboard` },
+      options: { redirectTo: redirectTo ?? `${window.location.origin}/dashboard` },
     })
 
-  const signInWithMagicLink = (email) =>
+  const signInWithMagicLink = (email, redirectTo) =>
     supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      options: { emailRedirectTo: redirectTo ?? `${window.location.origin}/dashboard` },
     })
 
   const signOut = () => supabase.auth.signOut()

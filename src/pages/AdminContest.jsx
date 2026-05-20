@@ -17,6 +17,7 @@ export default function AdminContest() {
   const [contest, setContest]       = useState(null)
   const [options, setOptions]       = useState([])
   const [allowed, setAllowed]       = useState([])
+  const [voters, setVoters]         = useState([])
   const [voteCount, setVoteCount]   = useState(0)
   const [loading, setLoading]       = useState(true)
   const [loadError, setLoadError]   = useState('')
@@ -41,15 +42,17 @@ export default function AdminContest() {
 
     if (cErr || !c) { setLoadError('Contest not found or access denied.'); setLoading(false); return }
 
-    const [{ data: opts }, { data: avs }, { count }] = await Promise.all([
+    const [{ data: opts }, { data: avs }, { count }, { data: voteRows }] = await Promise.all([
       supabase.from('contest_options').select('*').eq('contest_id', id).order('order_index'),
       supabase.from('allowed_voters').select('*').eq('contest_id', id).order('email'),
       supabase.from('votes').select('id', { count: 'exact', head: true }).eq('contest_id', id),
+      supabase.from('votes').select('id, voter_id, voter_token, created_at, profiles(email)').eq('contest_id', id).order('created_at'),
     ])
 
     setContest(c)
     setOptions(opts ?? [])
     setAllowed(avs ?? [])
+    setVoters(voteRows ?? [])
     setVoteCount(count ?? 0)
     setEditData({
       title:                     c.title,
@@ -172,6 +175,29 @@ export default function AdminContest() {
   const voteUrl    = `${window.location.origin}/vote/${contest?.vote_token}`
   const resultsUrl = `${window.location.origin}/results/${contest?.vote_token}`
 
+  async function downloadComments(format) {
+    setActionError('')
+    const { data: { session } } = await supabase.auth.getSession()
+    const authToken = session?.access_token
+    if (!authToken) { setActionError('Not authenticated'); return }
+
+    const res = await fetch(`/api/get-comments?contest_id=${id}&format=${format}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+    if (!res.ok) {
+      setActionError('Failed to download comments.')
+      return
+    }
+    const blob = await res.blob()
+    const ext = format === 'csv' ? 'csv' : 'md'
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${contest.title} - Comments.${ext}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function copyToClipboard(text) {
     setActionError('')
     setNotice('')
@@ -225,6 +251,42 @@ export default function AdminContest() {
           <StatCard label="Options" value={options.length} />
           <StatCard label="Winners" value={contest.max_winners} />
         </div>
+
+        {/* Voters */}
+        {voters.length > 0 && (
+          <div className="card p-5 space-y-3">
+            <h2 className="font-semibold text-slate-800">Who Voted</h2>
+            <p className="text-xs text-slate-400">Shows who submitted a ballot (not how they voted).</p>
+            <ul className="divide-y divide-slate-100">
+              {voters.map(v => (
+                <li key={v.id} className="flex items-center justify-between py-1.5 text-sm">
+                  <span className="text-slate-700">
+                    {v.profiles?.email ?? 'Anonymous'}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {new Date(v.created_at).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Comments Download */}
+        {voteCount > 0 && (
+          <div className="card p-5 space-y-3">
+            <h2 className="font-semibold text-slate-800">Voter Comments</h2>
+            <p className="text-xs text-slate-400">Download anonymous comments grouped by option.</p>
+            <div className="flex gap-2">
+              <button onClick={() => downloadComments('csv')} className="btn-secondary text-sm">
+                Download CSV
+              </button>
+              <button onClick={() => downloadComments('markdown')} className="btn-secondary text-sm">
+                Download Markdown
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Share links */}
         {contest.status !== 'draft' && (

@@ -24,7 +24,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) }
   }
 
-  const { contest_vote_token, rankings, voter_token, auth_token } = body
+  const { contest_vote_token, rankings, voter_token, auth_token, comments } = body
 
   if (!contest_vote_token || !Array.isArray(rankings) || rankings.length === 0) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields' }) }
@@ -133,6 +133,7 @@ exports.handler = async (event) => {
     p_voter_id: voter_id,
     p_voter_token: voter_id ? null : voter_token,
     p_rankings: rankings,
+    p_comments: Array.isArray(comments) ? comments : null,
   })
 
   if (submitErr) {

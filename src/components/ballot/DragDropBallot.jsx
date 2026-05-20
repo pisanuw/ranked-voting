@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-export default function DragDropBallot({ items, onChange }) {
+export default function DragDropBallot({ items, onChange, comments, onCommentChange }) {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -42,7 +42,14 @@ export default function DragDropBallot({ items, onChange }) {
         <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
           <ul className="divide-y divide-slate-100">
             {items.map((item, index) => (
-              <SortableItem key={item.id} item={item} rank={index + 1} total={items.length} />
+              <SortableItem
+                key={item.id}
+                item={item}
+                rank={index + 1}
+                total={items.length}
+                comment={comments?.[item.id] ?? ''}
+                onCommentChange={onCommentChange}
+              />
             ))}
           </ul>
         </SortableContext>
@@ -51,7 +58,7 @@ export default function DragDropBallot({ items, onChange }) {
   )
 }
 
-function SortableItem({ item, rank, total }) {
+function SortableItem({ item, rank, total, comment, onCommentChange }) {
   const {
     attributes,
     listeners,
@@ -78,33 +85,49 @@ function SortableItem({ item, rank, total }) {
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 px-4 py-3 select-none bg-white transition-shadow ${
+      className={`px-4 py-3 select-none bg-white transition-shadow ${
         isDragging ? 'shadow-lg z-10 relative' : ''
       }`}
     >
-      {/* Rank badge */}
-      <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${rankColor}`}>
-        {rank}
-      </span>
+      <div className="flex items-center gap-3">
+        {/* Rank badge */}
+        <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${rankColor}`}>
+          {rank}
+        </span>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">{item.title}</p>
-        {item.description && <p className="text-xs text-slate-400 truncate">{item.description}</p>}
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-800 truncate">{item.title}</p>
+          {item.description && <p className="text-xs text-slate-400 truncate">{item.description}</p>}
+        </div>
+
+        {/* Drag handle */}
+        <button
+          {...attributes}
+          {...listeners}
+          className="flex-shrink-0 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing p-1 touch-none"
+          aria-label="Drag to reorder"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 8h16M4 16h16" />
+          </svg>
+        </button>
       </div>
 
-      {/* Drag handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="flex-shrink-0 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing p-1 touch-none"
-        aria-label="Drag to reorder"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M4 8h16M4 16h16" />
-        </svg>
-      </button>
+      {/* Comment input */}
+      {onCommentChange && (
+        <div className="mt-2 ml-10">
+          <input
+            type="text"
+            maxLength={500}
+            className="w-full text-xs border border-slate-200 rounded px-2 py-1 text-slate-600 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            placeholder="Optional comment..."
+            value={comment}
+            onChange={e => onCommentChange(item.id, e.target.value)}
+          />
+        </div>
+      )}
     </li>
   )
 }

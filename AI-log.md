@@ -2,6 +2,29 @@
 
 # AI Log — Ranked Voting App
 
+## 2026-05-19T17:28 — Login redirect and dashboard contest visibility
+
+User: "If a user clicks on a link for a contest page and it requires them to login to vote, after login, they shoul dbe redirected to the contest voting page. From then on, they should be able to see the contest in their dashboard to be able to vote."
+
+---
+
+## 2026-05-19T17:22 — Download format clarification
+
+User: "For downloads, allow CSV as well as markdown. All else is good"
+
+---
+
+## 2026-05-19T17:21 — Four feature requests
+
+User: "1. Add ranked to localStorage on every reorder. 
+2. Allow users to enter comments next to the options - small text box
+3. Allow admins to see who voted but not how they voted
+4. Allow admins to download all comments from voters, grouped by option. The comments should be anonymous
+
+Any questions or suggestions?"
+
+---
+
 ## 2026-05-19T11:27 — Do not re-sort options on every render
 
 User: "Do not re-sort options. Only sort them once at the beginning for each user"

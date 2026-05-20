@@ -79,6 +79,16 @@ create table if not exists vote_rankings (
   unique (vote_id, rank)
 );
 
+-- Vote comments (optional per-option feedback from voters)
+create table if not exists vote_comments (
+  id          uuid primary key default gen_random_uuid(),
+  vote_id     uuid not null references votes(id) on delete cascade,
+  option_id   uuid not null references contest_options(id) on delete cascade,
+  comment     text not null check (char_length(comment) <= 500),
+  created_at  timestamptz default now(),
+  unique (vote_id, option_id)
+);
+
 -- ============================================================
 -- TRIGGERS
 -- ============================================================
@@ -260,7 +270,8 @@ create or replace function submit_vote_with_rankings(
   p_contest_id uuid,
   p_voter_id uuid,
   p_voter_token text,
-  p_rankings jsonb
+  p_rankings jsonb,
+  p_comments jsonb default null
 )
 returns uuid
 language plpgsql
@@ -308,6 +319,17 @@ begin
     (ranking->>'rank')::integer
   from jsonb_array_elements(p_rankings) ranking;
 
+  -- Insert optional per-option comments
+  if p_comments is not null and jsonb_typeof(p_comments) = 'array' then
+    insert into vote_comments (vote_id, option_id, comment)
+    select
+      v_vote_id,
+      (c->>'option_id')::uuid,
+      btrim(c->>'comment')
+    from jsonb_array_elements(p_comments) c
+    where btrim(coalesce(c->>'comment', '')) <> '';
+  end if;
+
   return v_vote_id;
 end;
 $$;
@@ -315,10 +337,10 @@ $$;
 revoke all on function create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) from public;
 grant execute on function create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
 
-revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb) from public;
-revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb) from anon;
-revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb) from authenticated;
-grant execute on function submit_vote_with_rankings(uuid, uuid, text, jsonb) to service_role;
+revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) from public;
+revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) from anon;
+revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) from authenticated;
+grant execute on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) to service_role;
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -330,6 +352,7 @@ alter table contest_options  enable row level security;
 alter table allowed_voters   enable row level security;
 alter table votes            enable row level security;
 alter table vote_rankings    enable row level security;
+alter table vote_comments    enable row level security;
 
 -- profiles
 create policy "Users can view own profile"
@@ -383,6 +406,15 @@ create policy "Admin reads vote rankings"
     where v.id = vote_id and c.admin_id = auth.uid()
   ));
 
+-- vote_comments: admin can read (comment text only, joined without voter identity)
+create policy "Admin reads vote comments"
+  on vote_comments for select
+  using (exists (
+    select 1 from votes v
+    join contests c on c.id = v.contest_id
+    where v.id = vote_id and c.admin_id = auth.uid()
+  ));
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -394,3 +426,5 @@ create index if not exists idx_options_contest_id   on contest_options(contest_i
 create index if not exists idx_allowed_contest_id   on allowed_voters(contest_id);
 create index if not exists idx_votes_contest_id     on votes(contest_id);
 create index if not exists idx_rankings_vote_id     on vote_rankings(vote_id);
+create index if not exists idx_comments_vote_id     on vote_comments(vote_id);
+create index if not exists idx_comments_option_id   on vote_comments(option_id);

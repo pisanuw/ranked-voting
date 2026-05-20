@@ -41,6 +41,7 @@ export default function VotingPage() {
   const [options, setOptions]         = useState([])
   const [pageState, setPageState]     = useState('loading') // loading | needLogin | notAllowed | open | alreadyVoted | submitted | closed | notFound
   const [ranked, setRanked]           = useState([])
+  const [comments, setComments]       = useState({}) // { optionId: text }
   const [submitting, setSubmitting]   = useState(false)
   const [submitError, setSubmitError] = useState('')
 
@@ -90,17 +91,18 @@ export default function VotingPage() {
       // re-renders (e.g. auth state changes) never re-shuffle.
       if (!ballotInitialized.current) {
         const opts = c.contest_options ?? []
+        const optsById = Object.fromEntries(opts.map(o => [o.id, o]))
         const orderKey = getStorageKey('rv_order', token)
-        const savedOrder = localStorage.getItem(orderKey)
-        let ordered
+        const rankedKey = getStorageKey('rv_ranked', token)
 
+        // Restore initial shuffle order
+        const savedOrder = localStorage.getItem(orderKey)
+        let ordered = null
         if (savedOrder) {
           const savedIds = JSON.parse(savedOrder)
-          const optsById = Object.fromEntries(opts.map(o => [o.id, o]))
           ordered = savedIds.map(id => optsById[id]).filter(Boolean)
           if (ordered.length !== opts.length) ordered = null
         }
-
         if (!ordered) {
           ordered = c.randomize_options
             ? shuffle(opts)
@@ -108,8 +110,24 @@ export default function VotingPage() {
           localStorage.setItem(orderKey, JSON.stringify(ordered.map(o => o.id)))
         }
 
+        // Restore in-progress ranking (user's drag-and-drop order)
+        const savedRanked = localStorage.getItem(rankedKey)
+        let rankedOrder = null
+        if (savedRanked) {
+          const rankedIds = JSON.parse(savedRanked)
+          rankedOrder = rankedIds.map(id => optsById[id]).filter(Boolean)
+          if (rankedOrder.length !== opts.length) rankedOrder = null
+        }
+
+        // Restore saved comments
+        const commentsKey = getStorageKey('rv_comments', token)
+        const savedComments = localStorage.getItem(commentsKey)
+        if (savedComments) {
+          setComments(JSON.parse(savedComments))
+        }
+
         setOptions(ordered)
-        setRanked(ordered)
+        setRanked(rankedOrder ?? ordered)
         ballotInitialized.current = true
       }
       setPageState('open')
@@ -129,11 +147,16 @@ export default function VotingPage() {
     const { data: { session } } = await supabase.auth.getSession()
     const authToken = session?.access_token ?? null
 
+    const voteComments = Object.entries(comments)
+      .filter(([, text]) => text.trim())
+      .map(([option_id, comment]) => ({ option_id, comment: comment.trim() }))
+
     const body = {
       contest_vote_token: token,
       rankings: ranked.map((opt, i) => ({ option_id: opt.id, rank: i + 1 })),
       voter_token: user ? null : getAnonymousToken(token),
       auth_token:  authToken,
+      comments: voteComments.length > 0 ? voteComments : null,
     }
 
     const res = await fetch('/api/submit-vote', {
@@ -155,12 +178,15 @@ export default function VotingPage() {
     }
 
     if (!user) markVoted(token)
+    // Clean up in-progress state from localStorage
+    localStorage.removeItem(getStorageKey('rv_ranked', token))
+    localStorage.removeItem(getStorageKey('rv_comments', token))
     setPageState('submitted')
   }
 
   async function handleMagicLink(e) {
     e.preventDefault()
-    await signInWithMagicLink(magicEmail)
+    await signInWithMagicLink(magicEmail, `${window.location.origin}/vote/${token}`)
     setMagicSent(true)
   }
 
@@ -218,7 +244,7 @@ export default function VotingPage() {
             <h1 className="text-xl font-bold">{contest?.title}</h1>
             <p className="text-sm text-slate-500">Sign in to cast your vote</p>
           </div>
-          <button onClick={signInWithGoogle} className="btn-secondary w-full py-2.5">
+          <button onClick={() => signInWithGoogle(`${window.location.origin}/vote/${token}`)} className="btn-secondary w-full py-2.5">
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -294,7 +320,27 @@ export default function VotingPage() {
           </p>
         </div>
 
-        <DragDropBallot items={ranked} onChange={setRanked} />
+        <DragDropBallot
+          items={ranked}
+          onChange={(newRanked) => {
+            setRanked(newRanked)
+            localStorage.setItem(
+              getStorageKey('rv_ranked', token),
+              JSON.stringify(newRanked.map(o => o.id))
+            )
+          }}
+          comments={comments}
+          onCommentChange={(optionId, text) => {
+            setComments(prev => {
+              const updated = { ...prev, [optionId]: text }
+              localStorage.setItem(
+                getStorageKey('rv_comments', token),
+                JSON.stringify(updated)
+              )
+              return updated
+            })
+          }}
+        />
 
         {submitError && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{submitError}</p>
