@@ -13,29 +13,20 @@ export default function CreateContest() {
   const [resultsVisible, setResultsVisible]    = useState(true)
   const [randomizeOptions, setRandomize]       = useState(true)
   const [endDate, setEndDate]                  = useState('')
-  const [options, setOptions]                  = useState([{ title: '', description: '' }, { title: '', description: '' }])
+  const [optionsText, setOptionsText]           = useState('')
   const [allowedEmails, setAllowedEmails]      = useState('')
   const [error, setError]                      = useState('')
   const [saving, setSaving]                    = useState(false)
-
-  function addOption() {
-    setOptions(prev => [...prev, { title: '', description: '' }])
-  }
-
-  function removeOption(i) {
-    if (options.length <= 2) return
-    setOptions(prev => prev.filter((_, idx) => idx !== i))
-  }
-
-  function updateOption(i, field, val) {
-    setOptions(prev => prev.map((o, idx) => idx === i ? { ...o, [field]: val } : o))
-  }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
 
-    const validOptions = options.filter(o => o.title.trim())
+    const validOptions = optionsText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(title => ({ title, description: null }))
     const emails = allowedEmails
       .split(/[\n,]+/)
       .map(e => e.trim().toLowerCase())
@@ -59,10 +50,7 @@ export default function CreateContest() {
       p_results_visible_to_voters: resultsVisible,
       p_randomize_options: randomizeOptions,
       p_end_date: endDate || null,
-      p_options: validOptions.map((o) => ({
-        title: o.title.trim(),
-        description: o.description.trim() || null,
-      })),
+      p_options: validOptions,
       p_allowed_emails: emails,
     })
 
@@ -121,26 +109,20 @@ export default function CreateContest() {
           {/* Options */}
           <div className="card p-5 space-y-3">
             <h2 className="font-semibold text-slate-800">Options / Candidates</h2>
-            {options.map((o, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <div className="flex-1 space-y-1">
-                  <input className="input" required value={o.title}
-                    onChange={e => updateOption(i, 'title', e.target.value)}
-                    placeholder={`Option ${i + 1}`} />
-                  <input className="input text-xs" value={o.description}
-                    onChange={e => updateOption(i, 'description', e.target.value)}
-                    placeholder="Short description (optional)" />
-                </div>
-                <button type="button" onClick={() => removeOption(i)}
-                  disabled={options.length <= 2}
-                  className="btn-ghost text-slate-400 mt-1 px-2">
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={addOption} className="btn-secondary text-sm">
-              + Add option
-            </button>
+            <div className="field">
+              <label className="label">One candidate per line *</label>
+              <textarea
+                className="input font-mono text-sm"
+                rows={6}
+                required
+                value={optionsText}
+                onChange={e => setOptionsText(e.target.value)}
+                placeholder={"Alice\nBob\nCharlie"}
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {optionsText.split('\n').filter(l => l.trim()).length} candidate(s)
+              </p>
+            </div>
           </div>
 
           {/* Settings */}

@@ -28,7 +28,7 @@ export default function AdminContest() {
   const [editMode, setEditMode]     = useState(false)
   const [editData, setEditData]     = useState({})
   const [newEmail, setNewEmail]     = useState('')
-  const [newOption, setNewOption]   = useState('')
+  const [newOptions, setNewOptions] = useState('')
   const [saving, setSaving]         = useState(false)
 
   const load = useCallback(async () => {
@@ -140,21 +140,22 @@ export default function AdminContest() {
     load()
   }
 
-  async function addOption() {
+  async function addOptions() {
     setActionError('')
     setNotice('')
-    const title = newOption.trim()
-    if (!title) return
+    const titles = newOptions.split('\n').map(l => l.trim()).filter(Boolean)
+    if (titles.length === 0) return
     if (contest.status !== 'draft') { setActionError('Cannot add options after contest has opened.'); return }
-    const { error } = await supabase.from('contest_options').insert({
-      contest_id: id, title, order_index: options.length
-    })
+    const rows = titles.map((title, i) => ({
+      contest_id: id, title, order_index: options.length + i
+    }))
+    const { error } = await supabase.from('contest_options').insert(rows)
     if (error) {
       setActionError(error.message)
       return
     }
-    setNewOption('')
-    setNotice('Option added.')
+    setNewOptions('')
+    setNotice(`${titles.length} option(s) added.`)
     load()
   }
 
@@ -312,12 +313,15 @@ export default function AdminContest() {
             </div>
           ))}
           {contest.status === 'draft' && (
-            <div className="flex gap-2 mt-2">
-              <input className="input flex-1 text-sm" value={newOption}
-                onChange={e => setNewOption(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addOption())}
-                placeholder="New option title…" />
-              <button onClick={addOption} className="btn-secondary text-sm">Add</button>
+            <div className="space-y-2 mt-2">
+              <textarea
+                className="input w-full text-sm font-mono"
+                rows={3}
+                value={newOptions}
+                onChange={e => setNewOptions(e.target.value)}
+                placeholder={"Add candidates, one per line…"}
+              />
+              <button onClick={addOptions} className="btn-secondary text-sm">Add</button>
             </div>
           )}
         </div>

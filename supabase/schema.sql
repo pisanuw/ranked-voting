@@ -358,6 +358,14 @@ alter table vote_comments    enable row level security;
 create policy "Users can view own profile"
   on profiles for select using (auth.uid() = id);
 
+create policy "Admin reads voter profiles"
+  on profiles for select
+  using (exists (
+    select 1 from votes v
+    join contests c on c.id = v.contest_id
+    where v.voter_id = profiles.id and c.admin_id = auth.uid()
+  ));
+
 create policy "Users can insert own profile"
   on profiles for insert with check (auth.uid() = id);
 

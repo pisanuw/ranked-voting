@@ -2,6 +2,30 @@
 
 # AI Log — Ranked Voting App
 
+## 2026-05-26T10:29 — Google login not working on localhost
+
+User: "When I login via Google on the local site at http://localhost:5173/login the login does not work"
+
+---
+
+## 2026-05-26T10:26 — Bulk candidate entry
+
+User: "On the 'Options / Candidates' section, the user should be able to enter all the candidates in one big box, one candidate per line, no descriptions."
+
+---
+
+## 2026-05-19T17:45 — Confirmed fix applied
+
+User: "Fixed. Thanks"
+
+---
+
+## 2026-05-19T17:43 — Bug: whitelisted voter shows as "anonymous"
+
+User: "I had 2 emails allowed for voting on the whitelist, but one of them showed as 'anonymous' on the 'who has voted' part"
+
+---
+
 ## 2026-05-19T17:28 — Login redirect and dashboard contest visibility
 
 User: "If a user clicks on a link for a contest page and it requires them to login to vote, after login, they shoul dbe redirected to the contest voting page. From then on, they should be able to see the contest in their dashboard to be able to vote."
