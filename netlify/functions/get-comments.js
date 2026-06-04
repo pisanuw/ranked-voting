@@ -55,23 +55,60 @@ exports.handler = async (event) => {
     return { statusCode: 403, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Access denied' }) }
   }
 
-  // Fetch comments joined to options (no voter identity)
-  const { data: comments, error } = await db
-    .from('vote_comments')
-    .select('comment, option_id, contest_options!inner(title)')
-    .eq('contest_options.contest_id', contestId)
-    .order('option_id')
+  // Fetch comments, options, and vote rankings in parallel
+  const [commentsRes, optionsRes, rankingsRes] = await Promise.all([
+    db.from('vote_comments')
+      .select('comment, option_id, contest_options!inner(title)')
+      .eq('contest_options.contest_id', contestId),
+    db.from('contest_options')
+      .select('id, title')
+      .eq('contest_id', contestId),
+    db.from('votes')
+      .select('vote_rankings(option_id, rank)')
+      .eq('contest_id', contestId),
+  ])
 
-  if (error) {
+  if (commentsRes.error) {
     return { statusCode: 500, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Failed to fetch comments' }) }
   }
 
-  // Group by option
+  // Compute average rank per option (lower = better ranked)
+  const rankSums = {}
+  const rankCounts = {}
+  for (const vote of (rankingsRes.data ?? [])) {
+    for (const r of (vote.vote_rankings ?? [])) {
+      rankSums[r.option_id] = (rankSums[r.option_id] ?? 0) + r.rank
+      rankCounts[r.option_id] = (rankCounts[r.option_id] ?? 0) + 1
+    }
+  }
+  const avgRank = {}
+  for (const id of Object.keys(rankSums)) {
+    avgRank[id] = rankSums[id] / rankCounts[id]
+  }
+
+  // Build option title lookup and sort order
+  const optionTitleById = {}
+  const allOptions = (optionsRes.data ?? [])
+  for (const o of allOptions) optionTitleById[o.id] = o.title
+
+  const hasRankings = Object.keys(avgRank).length > 0
+  allOptions.sort((a, b) => {
+    if (hasRankings) return (avgRank[a.id] ?? Infinity) - (avgRank[b.id] ?? Infinity)
+    return a.title.localeCompare(b.title)
+  })
+  const sortedTitles = allOptions.map(o => o.title)
+
+  // Group comments by option
   const grouped = {}
-  for (const row of (comments ?? [])) {
+  for (const title of sortedTitles) grouped[title] = []
+  for (const row of (commentsRes.data ?? [])) {
     const optionTitle = row.contest_options?.title ?? 'Unknown'
     if (!grouped[optionTitle]) grouped[optionTitle] = []
     grouped[optionTitle].push(row.comment)
+  }
+  // Remove options with no comments
+  for (const title of Object.keys(grouped)) {
+    if (grouped[title].length === 0) delete grouped[title]
   }
 
   if (format === 'csv') {

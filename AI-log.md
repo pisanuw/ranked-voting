@@ -2,6 +2,12 @@
 
 # AI Log — Ranked Voting App
 
+## 2026-05-26T13:38 — Sort downloaded comments by option ranking or alphabetically
+
+User: "The comments from users that can be downloaded should be either based on the ranking of the candidates, or if that is not possible or available, should be sorted alphabetically"
+
+---
+
 ## 2026-05-26T10:29 — Google login not working on localhost
 
 User: "When I login via Google on the local site at http://localhost:5173/login the login does not work"

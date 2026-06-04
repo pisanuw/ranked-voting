@@ -86,7 +86,7 @@ export default function AdminContest() {
         max_winners:               editData.max_winners,
         results_visible_to_voters: editData.results_visible_to_voters,
         randomize_options:         editData.randomize_options,
-        end_date:                  editData.end_date || null,
+        end_date:                  editData.end_date ? new Date(editData.end_date).toISOString() : null,
       })
       .eq('id', id)
     setSaving(false)

@@ -49,7 +49,7 @@ export default function CreateContest() {
       p_max_winners: maxWinners,
       p_results_visible_to_voters: resultsVisible,
       p_randomize_options: randomizeOptions,
-      p_end_date: endDate || null,
+      p_end_date: endDate ? new Date(endDate).toISOString() : null,
       p_options: validOptions,
       p_allowed_emails: emails,
     })

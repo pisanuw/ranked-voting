@@ -8,3 +8,5 @@
 2026-05-19 [code] Post-login redirect: VotingPage login now redirects back to /vote/:token instead of /dashboard
 2026-05-19 [code] Dashboard shows "Contests to Vote In" section via new my-contests Netlify function
 2026-05-19 [doc] Created BRIEFING.md with architecture, decisions, and key files
+
+2026-06-04 [code] Fix end_date timezone: convert datetime-local (local wall-clock) to UTC via toISOString on save in CreateContest and AdminContest; was stored as UTC and shifting on display
