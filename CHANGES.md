@@ -10,3 +10,11 @@
 2026-05-19 [doc] Created BRIEFING.md with architecture, decisions, and key files
 
 2026-06-04 [code] Fix end_date timezone: convert datetime-local (local wall-clock) to UTC via toISOString on save in CreateContest and AdminContest; was stored as UTC and shifting on display
+
+2026-06-06 [scope] Submission gate: new contests.submissions_open flag — voters can rank+comment while open but cannot submit until owner opens submissions (enforced in submit-vote)
+2026-06-06 [scope] Mandatory comments option: new contests.comments_required flag (default off) requires a comment on every option before submit; enforced client + server
+2026-06-06 [code] Comments now multi-line textarea, larger text, limit raised 500->2000 chars; migration add-submission-gate-and-required-comments.sql (run in Supabase SQL editor)
+
+2026-06-06 [scope] Domain whitelist: allowed_voters entries can be a whole domain (@uw.edu) as well as a full email; matched in submit-vote, no schema migration needed
+2026-06-06 [code] Extracted isVoterAllowed() helper in submit-vote.js (exported for unit tests) handling email + @domain matching
+2026-06-06 [note] Verified migration applied + features against live Supabase: submission gate, required comments, 2000-char comments (live function tests), domain matcher (10/10 unit), require_login trigger; README updated

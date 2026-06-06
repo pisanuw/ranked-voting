@@ -141,6 +141,14 @@ export default function VotingPage() {
       setSubmitError('Please rank all options before submitting.')
       return
     }
+    if (!contest?.submissions_open) {
+      setSubmitError('Submissions are not open yet. You can rank and comment now, then come back to submit.')
+      return
+    }
+    if (contest?.comments_required && !options.every(o => (comments[o.id] ?? '').trim())) {
+      setSubmitError('A comment is required for every option before you can submit.')
+      return
+    }
     setSubmitError('')
     setSubmitting(true)
 
@@ -317,11 +325,22 @@ export default function VotingPage() {
           <p className="text-sm text-brand-800">
             <strong>How to vote:</strong> Drag the options to rank them from most preferred (top) to least preferred (bottom).
             All {options.length} options must be ranked.
+            {contest.comments_required && ' A comment is required for every option.'}
           </p>
         </div>
 
+        {!contest.submissions_open && (
+          <div className="card p-4 bg-amber-50 border-amber-200">
+            <p className="text-sm text-amber-800">
+              <strong>Submissions aren't open yet.</strong> You can rank the options and write comments now —
+              your progress is saved on this device. Come back to submit once the organizer opens submissions.
+            </p>
+          </div>
+        )}
+
         <DragDropBallot
           items={ranked}
+          commentsRequired={contest.comments_required}
           onChange={(newRanked) => {
             setRanked(newRanked)
             localStorage.setItem(
@@ -348,10 +367,12 @@ export default function VotingPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || !contest.submissions_open}
           className="btn-primary w-full py-3 text-base"
         >
-          {submitting ? 'Submitting…' : 'Submit My Vote'}
+          {!contest.submissions_open
+            ? 'Submissions not open yet'
+            : submitting ? 'Submitting…' : 'Submit My Vote'}
         </button>
       </div>
     </div>

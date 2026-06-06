@@ -12,13 +12,17 @@ A web app for running ranked-choice (STV/IRV) elections. Admins create contests 
 ## Key Design Decisions
 - Voter-facing DB reads go through Netlify Functions (service key) to prevent anon key enumeration
 - Admin reads use Supabase client with RLS (auth JWT)
-- Voting is URL-gated by default; login only required when a voter email whitelist exists
+- Voting is URL-gated by default; login only required when a voter whitelist exists
+- Whitelist (`allowed_voters`) entries are either a full email or a domain rule beginning with `@` (e.g. `@uw.edu`); matching logic is `isVoterAllowed()` in submit-vote.js
 - STV algorithm (Droop quota, fractional surplus redistribution) runs server-side in get-results function
 - Ballot option order is shuffled once per user and persisted to localStorage (not re-shuffled on re-renders)
 - Voter comments are stored per-option, downloadable by admin as CSV/Markdown (anonymous, no voter identity)
 - Admins can see who voted (email + timestamp) but not how they voted
 - Post-login redirect returns user to the contest voting page they came from
 - Dashboard shows both admin contests and contests the user can vote in
+- Submission gate: `contests.submissions_open` (default false) lets voters rank + comment while a contest is open but blocks the actual submit until the owner opens submissions (toggle on AdminContest, enforced in submit-vote)
+- Mandatory comments: `contests.comments_required` (default false) requires a non-empty comment on every option before submit (enforced client-side and in submit-vote)
+- Per-option comments are multi-line, up to 2000 chars
 
 ## Non-Goals
 - No real-time/WebSocket updates

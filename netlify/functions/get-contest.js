@@ -26,7 +26,7 @@ exports.handler = async (event) => {
 
   const { data: contest, error } = await db()
     .from('contests')
-    .select('id, title, description, vote_token, status, end_date, require_login, results_visible_to_voters, randomize_options, max_winners, contest_options(id, title, description, order_index)')
+    .select('id, title, description, vote_token, status, end_date, require_login, results_visible_to_voters, randomize_options, submissions_open, comments_required, max_winners, contest_options(id, title, description, order_index)')
     .eq('vote_token', token)
     .single()
 

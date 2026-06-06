@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-export default function DragDropBallot({ items, onChange, comments, onCommentChange }) {
+export default function DragDropBallot({ items, onChange, comments, onCommentChange, commentsRequired = false }) {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -49,6 +49,7 @@ export default function DragDropBallot({ items, onChange, comments, onCommentCha
                 total={items.length}
                 comment={comments?.[item.id] ?? ''}
                 onCommentChange={onCommentChange}
+                commentsRequired={commentsRequired}
               />
             ))}
           </ul>
@@ -58,7 +59,7 @@ export default function DragDropBallot({ items, onChange, comments, onCommentCha
   )
 }
 
-function SortableItem({ item, rank, total, comment, onCommentChange }) {
+function SortableItem({ item, rank, total, comment, onCommentChange, commentsRequired }) {
   const {
     attributes,
     listeners,
@@ -116,18 +117,28 @@ function SortableItem({ item, rank, total, comment, onCommentChange }) {
       </div>
 
       {/* Comment input */}
-      {onCommentChange && (
-        <div className="mt-2 ml-10">
-          <input
-            type="text"
-            maxLength={500}
-            className="w-full text-xs border border-slate-200 rounded px-2 py-1 text-slate-600 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
-            placeholder="Optional comment..."
-            value={comment}
-            onChange={e => onCommentChange(item.id, e.target.value)}
-          />
-        </div>
-      )}
+      {onCommentChange && (() => {
+        const missing = commentsRequired && !comment.trim()
+        return (
+          <div className="mt-2 ml-10">
+            <textarea
+              rows={2}
+              maxLength={2000}
+              className={`w-full text-sm border rounded px-2 py-1.5 text-slate-700 placeholder-slate-300 resize-y focus:outline-none focus:ring-1 ${
+                missing
+                  ? 'border-amber-300 focus:ring-amber-400'
+                  : 'border-slate-200 focus:ring-brand-400'
+              }`}
+              placeholder={commentsRequired ? 'Comment required…' : 'Optional comment…'}
+              value={comment}
+              onChange={e => onCommentChange(item.id, e.target.value)}
+            />
+            {missing && (
+              <p className="text-xs text-amber-600 mt-0.5">A comment is required for this option.</p>
+            )}
+          </div>
+        )
+      })()}
     </li>
   )
 }

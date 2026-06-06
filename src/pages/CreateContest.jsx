@@ -12,6 +12,7 @@ export default function CreateContest() {
   const [maxWinners, setMaxWinners]            = useState(1)
   const [resultsVisible, setResultsVisible]    = useState(true)
   const [randomizeOptions, setRandomize]       = useState(true)
+  const [commentsRequired, setCommentsRequired] = useState(false)
   const [endDate, setEndDate]                  = useState('')
   const [optionsText, setOptionsText]           = useState('')
   const [allowedEmails, setAllowedEmails]      = useState('')
@@ -49,6 +50,7 @@ export default function CreateContest() {
       p_max_winners: maxWinners,
       p_results_visible_to_voters: resultsVisible,
       p_randomize_options: randomizeOptions,
+      p_comments_required: commentsRequired,
       p_end_date: endDate ? new Date(endDate).toISOString() : null,
       p_options: validOptions,
       p_allowed_emails: emails,
@@ -141,6 +143,12 @@ export default function CreateContest() {
               checked={randomizeOptions}
               onChange={setRandomize}
             />
+            <Toggle
+              label="Require a comment for every option"
+              detail="Voters must comment on each option before they can submit"
+              checked={commentsRequired}
+              onChange={setCommentsRequired}
+            />
           </div>
 
           {/* Allowed voters */}
@@ -148,14 +156,15 @@ export default function CreateContest() {
             <div>
               <h2 className="font-semibold text-slate-800">Voter Email Whitelist</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Leave empty to allow anyone with the voting URL. When filled, only these emails may vote.
+                Leave empty to allow anyone with the voting URL. When filled, only these voters may vote.
+                Add a whole domain (e.g. <code>@uw.edu</code>) to allow any address on that domain.
               </p>
             </div>
             <div className="field">
-              <label className="label">Emails (one per line or comma-separated)</label>
+              <label className="label">Emails or domains (one per line or comma-separated)</label>
               <textarea className="input font-mono text-xs" rows={4} value={allowedEmails}
                 onChange={e => setAllowedEmails(e.target.value)}
-                placeholder={"alice@example.com\nbob@example.com"} />
+                placeholder={"alice@example.com\n@uw.edu"} />
             </div>
           </div>
 

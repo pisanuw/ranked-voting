@@ -3,6 +3,19 @@ const { createClient } = require('@supabase/supabase-js')
 const supabaseAdmin = () =>
   createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
+// A whitelist entry is either a full email (alice@uw.edu) or a domain rule
+// beginning with "@" (@uw.edu) that allows any address on that domain.
+function isVoterAllowed(allowedEntries, voterEmail) {
+  const email       = (voterEmail || '').toLowerCase()
+  const atIndex     = email.lastIndexOf('@')
+  const emailDomain = atIndex >= 0 ? email.slice(atIndex) : '' // includes the "@"
+  if (!email) return false
+  return allowedEntries.some(e => {
+    const entry = (e || '').toLowerCase()
+    return entry.startsWith('@') ? entry === emailDomain : entry === email
+  })
+}
+
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -48,6 +61,12 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'This contest is not currently open for voting' }) }
   }
 
+  // Submissions may be gated separately: voters can rank/comment while
+  // submissions_open is false, but cannot actually submit until the owner opens them.
+  if (!contest.submissions_open) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Submissions are not open for this contest yet' }) }
+  }
+
   // Check end date
   if (contest.end_date && new Date(contest.end_date) < new Date()) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'This contest has passed its end date' }) }
@@ -82,7 +101,7 @@ exports.handler = async (event) => {
     if (!voterEmail) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'You must be logged in to vote in this contest' }) }
     }
-    const allowed = allowedVoters.some(av => av.email.toLowerCase() === voterEmail.toLowerCase())
+    const allowed = isVoterAllowed(allowedVoters.map(av => av.email), voterEmail)
     if (!allowed) {
       return { statusCode: 403, headers, body: JSON.stringify({ error: 'Your email is not on the voter list for this contest' }) }
     }
@@ -101,6 +120,19 @@ exports.handler = async (event) => {
 
   if (!allRanked || !noExtras || !correctCount || !ranksAreUnique || !ranksAreSequential) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid rankings: all options must be ranked exactly once' }) }
+  }
+
+  // ── Required comments check ───────────────────────────────────────────
+  if (contest.comments_required) {
+    const commentedOptionIds = new Set(
+      (Array.isArray(comments) ? comments : [])
+        .filter(c => c && typeof c.comment === 'string' && c.comment.trim())
+        .map(c => c.option_id)
+    )
+    const everyOptionCommented = optionIds.every(id => commentedOptionIds.has(id))
+    if (!everyOptionCommented) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'A comment is required for every option' }) }
+    }
   }
 
   // ── Duplicate vote check ──────────────────────────────────────────────
@@ -148,3 +180,6 @@ exports.handler = async (event) => {
 
   return { statusCode: 200, headers, body: JSON.stringify({ success: true }) }
 }
+
+// Exported for unit testing
+exports.isVoterAllowed = isVoterAllowed

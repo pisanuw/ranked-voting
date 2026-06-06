@@ -14,6 +14,7 @@ drop function if exists public.sync_contest_require_login_from_whitelist();
 
 drop function if exists public.submit_vote_with_rankings(uuid, uuid, text, jsonb);
 drop function if exists public.create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]);
+drop function if exists public.create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]);
 
 drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists public.handle_new_user();
@@ -47,6 +48,8 @@ create table public.contests (
   require_login             boolean not null default true,
   results_visible_to_voters boolean not null default true,
   randomize_options         boolean not null default true,
+  submissions_open          boolean not null default false,
+  comments_required         boolean not null default false,
   end_date                  timestamptz,
   status                    text not null default 'draft'
                               check (status in ('draft', 'open', 'closed')),
@@ -145,6 +148,7 @@ create or replace function public.create_contest_with_relations(
   p_max_winners integer,
   p_results_visible_to_voters boolean,
   p_randomize_options boolean,
+  p_comments_required boolean,
   p_end_date timestamptz,
   p_options jsonb,
   p_allowed_emails text[]
@@ -208,6 +212,7 @@ begin
     require_login,
     results_visible_to_voters,
     randomize_options,
+    comments_required,
     end_date,
     status
   )
@@ -219,6 +224,7 @@ begin
     coalesce(array_length(p_allowed_emails, 1), 0) > 0,
     coalesce(p_results_visible_to_voters, true),
     coalesce(p_randomize_options, true),
+    coalesce(p_comments_required, false),
     p_end_date,
     'draft'
   )
@@ -318,8 +324,8 @@ $$;
 -- FUNCTION PERMISSIONS
 -- ------------------------------------------------------------
 
-revoke all on function public.create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) from public;
-grant execute on function public.create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
+revoke all on function public.create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) from public;
+grant execute on function public.create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
 
 revoke all on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) from public;
 revoke all on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) from anon;

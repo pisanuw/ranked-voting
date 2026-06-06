@@ -30,6 +30,10 @@ create table if not exists contests (
   require_login             boolean not null default true,
   results_visible_to_voters boolean not null default true,
   randomize_options         boolean not null default true,
+  -- when false, voters can rank + comment but cannot submit yet
+  submissions_open          boolean not null default false,
+  -- when true, voters must comment on every option before submitting
+  comments_required         boolean not null default false,
   end_date                  timestamptz,
   status                    text not null default 'draft'
                               check (status in ('draft', 'open', 'closed')),
@@ -84,7 +88,7 @@ create table if not exists vote_comments (
   id          uuid primary key default gen_random_uuid(),
   vote_id     uuid not null references votes(id) on delete cascade,
   option_id   uuid not null references contest_options(id) on delete cascade,
-  comment     text not null check (char_length(comment) <= 500),
+  comment     text not null check (char_length(comment) <= 2000),
   created_at  timestamptz default now(),
   unique (vote_id, option_id)
 );
@@ -153,6 +157,7 @@ create or replace function create_contest_with_relations(
   p_max_winners integer,
   p_results_visible_to_voters boolean,
   p_randomize_options boolean,
+  p_comments_required boolean,
   p_end_date timestamptz,
   p_options jsonb,
   p_allowed_emails text[]
@@ -216,6 +221,7 @@ begin
     require_login,
     results_visible_to_voters,
     randomize_options,
+    comments_required,
     end_date,
     status
   )
@@ -227,6 +233,7 @@ begin
     coalesce(array_length(p_allowed_emails, 1), 0) > 0,
     coalesce(p_results_visible_to_voters, true),
     coalesce(p_randomize_options, true),
+    coalesce(p_comments_required, false),
     p_end_date,
     'draft'
   )
@@ -334,8 +341,8 @@ begin
 end;
 $$;
 
-revoke all on function create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) from public;
-grant execute on function create_contest_with_relations(text, text, integer, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
+revoke all on function create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) from public;
+grant execute on function create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
 
 revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) from public;
 revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) from anon;

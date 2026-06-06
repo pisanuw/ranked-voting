@@ -60,6 +60,7 @@ export default function AdminContest() {
       max_winners:               c.max_winners,
       results_visible_to_voters: c.results_visible_to_voters,
       randomize_options:         c.randomize_options,
+      comments_required:         c.comments_required,
       end_date:                  c.end_date ? format(new Date(c.end_date), "yyyy-MM-dd'T'HH:mm") : '',
     })
     setLoading(false)
@@ -86,6 +87,7 @@ export default function AdminContest() {
         max_winners:               editData.max_winners,
         results_visible_to_voters: editData.results_visible_to_voters,
         randomize_options:         editData.randomize_options,
+        comments_required:         editData.comments_required,
         end_date:                  editData.end_date ? new Date(editData.end_date).toISOString() : null,
       })
       .eq('id', id)
@@ -108,16 +110,31 @@ export default function AdminContest() {
     load()
   }
 
+  async function setSubmissionsOpen(open) {
+    setActionError('')
+    setNotice('')
+    const { error } = await supabase.from('contests').update({ submissions_open: open }).eq('id', id)
+    if (error) {
+      setActionError(error.message)
+      return
+    }
+    setNotice(open ? 'Submissions are now open — voters can submit.' : 'Submissions locked — voters can still rank and comment.')
+    load()
+  }
+
   async function addAllowedEmail() {
     setActionError('')
     setNotice('')
-    const email = newEmail.trim().toLowerCase()
-    if (!email.includes('@')) {
-      setActionError('Please enter a valid email address.')
+    const entry = newEmail.trim().toLowerCase()
+    // Accept a full email (alice@uw.edu) or a domain rule (@uw.edu)
+    const isDomain = /^@[^@\s]+\.[^@\s]+$/.test(entry)
+    const isEmail  = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(entry)
+    if (!isDomain && !isEmail) {
+      setActionError('Enter a valid email (alice@uw.edu) or domain (@uw.edu).')
       return
     }
 
-    const { error } = await supabase.from('allowed_voters').insert({ contest_id: id, email })
+    const { error } = await supabase.from('allowed_voters').insert({ contest_id: id, email: entry })
     if (error) {
       setActionError(error.message)
       return
@@ -233,12 +250,26 @@ export default function AdminContest() {
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_COLORS[contest.status]}`}>
                 {contest.status}
               </span>
+              {contest.status === 'open' && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${contest.submissions_open ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {contest.submissions_open ? 'Submissions open' : 'Submissions locked'}
+                </span>
+              )}
             </div>
             {contest.description && <p className="text-slate-500 text-sm mt-1">{contest.description}</p>}
+            {contest.status === 'open' && !contest.submissions_open && (
+              <p className="text-xs text-amber-600 mt-1">Voters can rank and comment, but cannot submit until you open submissions.</p>
+            )}
           </div>
           <div className="flex gap-2 flex-shrink-0">
             {contest.status === 'draft' && (
               <button onClick={() => setStatus('open')} className="btn-primary text-sm">Open Contest</button>
+            )}
+            {contest.status === 'open' && !contest.submissions_open && (
+              <button onClick={() => setSubmissionsOpen(true)} className="btn-primary text-sm">Open Submissions</button>
+            )}
+            {contest.status === 'open' && contest.submissions_open && (
+              <button onClick={() => setSubmissionsOpen(false)} className="btn-secondary text-sm">Lock Submissions</button>
             )}
             {contest.status === 'open' && (
               <button onClick={() => setStatus('closed')} className="btn-danger text-sm">Close Contest</button>
@@ -332,21 +363,24 @@ export default function AdminContest() {
             <h2 className="font-semibold text-slate-800">Voter Whitelist</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {allowed.length === 0
-                ? 'Open to anyone with the voting URL.'
-                : `${allowed.length} email${allowed.length !== 1 ? 's' : ''} allowed.`}
+                ? 'Open to anyone with the voting URL. Add an email or a domain like @uw.edu to restrict.'
+                : `${allowed.length} entr${allowed.length !== 1 ? 'ies' : 'y'} allowed (emails and/or @domains).`}
             </p>
           </div>
           {allowed.map(av => (
             <div key={av.id} className="flex items-center justify-between text-sm py-1 border-b border-slate-100 last:border-0">
-              <span className="text-slate-700">{av.email}</span>
+              <span className="text-slate-700">
+                {av.email}
+                {av.email.startsWith('@') && <span className="ml-2 text-xs text-slate-400">(whole domain)</span>}
+              </span>
               <button onClick={() => removeAllowedEmail(av.id)} className="btn-ghost text-slate-400 text-xs px-2">✕</button>
             </div>
           ))}
           <div className="flex gap-2">
-            <input className="input flex-1 text-sm" type="email" value={newEmail}
+            <input className="input flex-1 text-sm" type="text" value={newEmail}
               onChange={e => setNewEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addAllowedEmail())}
-              placeholder="voter@example.com" />
+              placeholder="voter@uw.edu or @uw.edu" />
             <button onClick={addAllowedEmail} className="btn-secondary text-sm">Add</button>
           </div>
         </div>
@@ -388,6 +422,7 @@ export default function AdminContest() {
                 {[
                   ['results_visible_to_voters', 'Results visible to all voters'],
                   ['randomize_options',         'Randomize option order per voter'],
+                  ['comments_required',         'Require a comment for every option'],
                 ].map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={editData[key]}
@@ -409,6 +444,7 @@ export default function AdminContest() {
               <SettingRow label="Login Required" value={contest.require_login ? 'Yes (voter whitelist active)' : 'No (URL is enough)'} />
               <SettingRow label="Results Visible" value={contest.results_visible_to_voters ? 'All voters' : 'Admin only'} />
               <SettingRow label="Randomize" value={contest.randomize_options ? 'Yes (per voter)' : 'No'} />
+              <SettingRow label="Comments" value={contest.comments_required ? 'Required for every option' : 'Optional'} />
             </dl>
           )}
         </div>
