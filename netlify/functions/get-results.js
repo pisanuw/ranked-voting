@@ -104,6 +104,9 @@ function runIRV(votes, options, maxWinners) {
   return { winners, rounds, quota }
 }
 
+// Exported for unit testing (pure function, no I/O).
+exports.runIRV = runIRV
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const supabaseAdmin = () =>
