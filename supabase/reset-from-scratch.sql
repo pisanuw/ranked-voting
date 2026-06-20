@@ -324,7 +324,7 @@ $$;
 -- FUNCTION PERMISSIONS
 -- ------------------------------------------------------------
 
-revoke all on function public.create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) from public;
+revoke all on function public.create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) from public, anon;
 grant execute on function public.create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
 
 revoke all on function public.submit_vote_with_rankings(uuid, uuid, text, jsonb) from public;

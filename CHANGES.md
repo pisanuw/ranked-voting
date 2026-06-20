@@ -18,3 +18,6 @@
 2026-06-06 [scope] Domain whitelist: allowed_voters entries can be a whole domain (@uw.edu) as well as a full email; matched in submit-vote, no schema migration needed
 2026-06-06 [code] Extracted isVoterAllowed() helper in submit-vote.js (exported for unit tests) handling email + @domain matching
 2026-06-06 [note] Verified migration applied + features against live Supabase: submission gate, required comments, 2000-char comments (live function tests), domain matcher (10/10 unit), require_login trigger; README updated
+
+2026-06-06 [code] Security hardening (Supabase advisors): pinned search_path=public on handle_new_user + sync trigger fns, revoked their RPC EXECUTE, revoked anon EXECUTE on create_contest_with_relations; supabase/harden-trigger-functions.sql
+2026-06-06 [note] Advisor "RLS disabled on public.whitelist" was stale: no such table (renamed to allowed_voters long ago); all 7 live tables have RLS enabled

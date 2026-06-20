@@ -99,7 +99,8 @@ create table if not exists vote_comments (
 
 -- Auto-create profile on new user signup
 create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer
+set search_path = public as $$
 begin
   insert into profiles (id, email)
   values (
@@ -121,7 +122,8 @@ create trigger on_auth_user_created
 
 -- Keep contests.require_login synchronized with whitelist presence.
 create or replace function sync_contest_require_login_from_whitelist()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer
+set search_path = public as $$
 declare
   v_contest_id uuid;
 begin
@@ -146,6 +148,11 @@ drop trigger if exists on_allowed_voters_changed on allowed_voters;
 create trigger on_allowed_voters_changed
   after insert or update or delete on allowed_voters
   for each row execute procedure sync_contest_require_login_from_whitelist();
+
+-- These are trigger-only functions; they should not be callable as PostgREST RPCs.
+-- Triggers still fire regardless of these grants.
+revoke all on function handle_new_user() from public, anon, authenticated;
+revoke all on function sync_contest_require_login_from_whitelist() from public, anon, authenticated;
 
 -- ============================================================
 -- RPC FUNCTIONS
@@ -341,7 +348,7 @@ begin
 end;
 $$;
 
-revoke all on function create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) from public;
+revoke all on function create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) from public, anon;
 grant execute on function create_contest_with_relations(text, text, integer, boolean, boolean, boolean, timestamptz, jsonb, text[]) to authenticated;
 
 revoke all on function submit_vote_with_rankings(uuid, uuid, text, jsonb, jsonb) from public;
