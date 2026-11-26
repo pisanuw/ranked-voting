@@ -8,6 +8,24 @@
   port = 5173
   targetPort = 5173
 
+# The primary address is ranked-voting.hintwise.org. Send the old netlify.app
+# address there, path and query kept, so a sign-in never starts on one host and
+# returns to the other (its session would be stored on the wrong host). These
+# rules match only the netlify.app host, so the new host never loops; deploy
+# previews use other hosts and are not affected. They come first, before the
+# /api/* rule, so an old link to a function is redirected too.
+[[redirects]]
+  from = "https://ranked-voting.netlify.app/*"
+  to = "https://ranked-voting.hintwise.org/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://ranked-voting.netlify.app/*"
+  to = "https://ranked-voting.hintwise.org/:splat"
+  status = 301
+  force = true
+
 # API routes go to Netlify Functions — must come BEFORE the SPA catch-all
 [[redirects]]
   from = "/api/*"

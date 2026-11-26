@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import PrivacyNote from '../components/PrivacyNote'
 
 export default function Login() {
   const { user, signInWithGoogle, signInWithMagicLink } = useAuth()
@@ -28,7 +29,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 to-slate-100 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-brand-50 to-slate-100 px-4">
       <div className="card w-full max-w-md p-8 space-y-6">
         {/* Logo / title */}
         <div className="text-center space-y-1">
@@ -94,6 +95,7 @@ export default function Login() {
           </>
         )}
       </div>
+      <PrivacyNote className="w-full max-w-md" />
     </div>
   )
 }

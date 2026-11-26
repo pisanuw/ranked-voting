@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import PrivacyNote from '../components/PrivacyNote'
 import DragDropBallot from '../components/ballot/DragDropBallot'
 
 function getStorageKey(prefix, voteToken) {
@@ -278,6 +279,7 @@ export default function VotingPage() {
             </form>
           )}
         </div>
+        <PrivacyNote className="w-full max-w-md" />
       </CenteredLayout>
     )
   }
@@ -374,6 +376,8 @@ export default function VotingPage() {
             ? 'Submissions not open yet'
             : submitting ? 'Submitting…' : 'Submit My Vote'}
         </button>
+
+        <PrivacyNote />
       </div>
     </div>
   )
@@ -381,7 +385,7 @@ export default function VotingPage() {
 
 function CenteredLayout({ children }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 to-slate-100 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-brand-50 to-slate-100 px-4">
       {children}
     </div>
   )
