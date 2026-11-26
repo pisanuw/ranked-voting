@@ -20,6 +20,7 @@ describe('privacy note', () => {
       'script errors',
       'with its code replaced by :id',
       'apart from what a script error message may contain, it never includes your ballot, your comments or your email address',
+      'a random value that changes each UTC day; your IP address and user agent are not stored',
       'uses no cookie',
       'Do Not Track',
       'Global Privacy Control',
