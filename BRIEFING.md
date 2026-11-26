@@ -30,7 +30,9 @@ A web app for running ranked-choice (STV/IRV) elections. Admins create contests 
 - No editing votes after submission
 
 ## Deployment
-- Netlify: ranked-voting.netlify.app (frontend + functions)
+- Netlify site `ranked-voting` (frontend + functions); primary address https://ranked-voting.hintwise.org since the HintWise move (owner, 26 Nov 2026). `netlify.toml` answers https:// and http://ranked-voting.netlify.app/* with a 301 to the same path on the new address; the rules are first and match only the netlify.app host
+- HintWise footer embedded in `index.html` (footerHtml('ranked-voting'), sha256 pinned in src/__tests__/site-footer.test.js); HintWise analytics `public/hw-events.js` (unchanged platform copy, sha256 pinned in src/__tests__/analytics.test.js), tag in `<head>` with data-mask for /vote/, /results/, /admin/; privacy note in src/components/PrivacyNote.jsx on Login and VotingPage
+- Sign-in redirects use window.location.origin, so the Supabase project's Site URL and Redirect URLs must name https://ranked-voting.hintwise.org (.env.example)
 - Supabase: PostgreSQL + Auth (project ref in env vars)
 - Schema changes require running SQL in Supabase SQL Editor manually
 

@@ -21,3 +21,8 @@
 
 2026-06-06 [code] Security hardening (Supabase advisors): pinned search_path=public on handle_new_user + sync trigger fns, revoked their RPC EXECUTE, revoked anon EXECUTE on create_contest_with_relations; supabase/harden-trigger-functions.sql
 2026-06-06 [note] Advisor "RLS disabled on public.whitelist" was stale: no such table (renamed to allowed_voters long ago); all 7 live tables have RLS enabled
+
+2026-11-26 [code] HintWise move (owner, 26 Nov: "rv move yes"): primary address https://ranked-voting.hintwise.org; netlify.toml 301s https:// and http://ranked-voting.netlify.app/* there, path kept, first rule, no rule on the new host
+2026-11-26 [code] HintWise footer embedded in index.html (footerHtml('ranked-voting'), sha256 test); analytics public/hw-events.js (platform copy, sha256 test), tag in head with data-mask /vote/ /results/ /admin/; privacy note on Login and VotingPage; HintWise favicon in place of the missing /ballot.svg
+2026-11-26 [doc] README, BRIEFING and .env.example: the new address, and the Supabase Site URL and Redirect URLs it needs
+2026-11-26 [note] The Supabase project the live bundle names does not resolve (DNS NXDOMAIN, checked 26 Nov): sign-in and contest reads fail on the live site until the owner restores that project or the app moves to the shared HintWise project. Email sign-in stays Supabase's own magic link here: the platform's emailed code needs auth and data on the same project, so it moves with the data (a separate decision)
