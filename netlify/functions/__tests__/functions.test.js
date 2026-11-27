@@ -325,6 +325,20 @@ describe('get-comments', () => {
     expect(md.body.startsWith('# Board "2026" - Voter Comments\n\n## B, the "best"\n\n- Says "yes"\n')).toBe(true)
   })
 
+  it('keeps a comment a spreadsheet would read as a formula as text', async () => {
+    for (const formula of ['=HYPERLINK("https://example.org","x")', '+1+1', '-2+3', '@SUM(A1)', '\tTab', '\rReturn']) {
+      expect(getComments.csvCell(formula), JSON.stringify(formula)).toBe(`"'${formula.replace(/"/g, '""')}"`)
+    }
+    for (const plain of ['Fine', ' =not first', 'a=b', '1-2', '', "'already quoted"]) {
+      expect(getComments.csvCell(plain), JSON.stringify(plain)).toBe(`"${plain}"`)
+    }
+    const res = await getComments.makeHandler(fake({
+      data: { title: 'T', options: [{ id: UUID_A, title: '=A', avg_rank: 1 }], comments: [{ option_id: UUID_A, comment: '=1+1' }] },
+      error: null,
+    }))(get({ contest_id: UUID_A, format: 'csv' }, auth))
+    expect(res.body).toBe(`Option,Comment\n"'=A","'=1+1"\n`)
+  })
+
   it('orders options by title before any ballot, and says when there are no comments', async () => {
     const grouped = getComments.groupComments({
       options: [{ id: UUID_B, title: 'Zed', avg_rank: null }, { id: UUID_A, title: 'Abe', avg_rank: null }],

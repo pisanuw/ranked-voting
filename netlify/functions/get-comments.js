@@ -39,7 +39,16 @@ function groupComments(feedback) {
   return grouped
 }
 
-const csvCell = value => `"${String(value).replace(/"/g, '""')}"`
+/**
+ * One quoted CSV cell. Voters write the comments and the admin opens the file in a
+ * spreadsheet, so a cell that a spreadsheet would read as a formula (it starts with =, +, -,
+ * @, a tab or a carriage return) gets a leading ' and stays text.
+ */
+function csvCell(value) {
+  let text = String(value)
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+  return `"${text.replace(/"/g, '""')}"`
+}
 
 function toCsv(grouped) {
   let csv = 'Option,Comment\n'
@@ -107,6 +116,7 @@ function makeHandler({ client = appClient } = {}) {
 }
 
 exports.groupComments = groupComments
+exports.csvCell = csvCell
 exports.toCsv = toCsv
 exports.toMarkdown = toMarkdown
 exports.fileName = fileName
