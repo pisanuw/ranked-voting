@@ -2,7 +2,7 @@
 
 A full-stack ranked-choice voting web app. Admins create contests, invite voters, and let the app compute winners using a step-by-step Single Transferable Vote (STV/IRV) algorithm.
 
-**Live app:** https://ranked-voting.netlify.app/login
+**Live app:** https://ranked-voting.hintwise.org/login (part of [HintWise](https://studio.hintwise.org/); the old address, https://ranked-voting.netlify.app, answers 301 to the same path there)
 
 ## Features
 
@@ -111,6 +111,16 @@ npm run dev
 | `SUPABASE_SERVICE_KEY` | Supabase service role key (**never expose client-side**) |
 
 3. Push to your connected branch — Netlify builds and deploys automatically.
+4. In the Supabase project, **Authentication → URL Configuration**: Site URL `https://ranked-voting.hintwise.org`, and `https://ranked-voting.hintwise.org/**` in Redirect URLs (plus `http://localhost:5173/**` for local development). Google sign-in and the emailed link return to the page they started on.
+
+## HintWise
+
+RankedVote is a HintWise app in its own repository (claude-built-apps `docs/new-app-guide.md`, option B):
+
+- **Address:** https://ranked-voting.hintwise.org. `netlify.toml` sends `https://` and `http://ranked-voting.netlify.app/*` there with a 301, path and query kept; the rules match only the netlify.app host, so the new host never loops. `src/__tests__/netlify-redirects.test.js` pins them.
+- **Footer:** the HintWise "built by" footer is `footerHtml('ranked-voting')` from claude-built-apps `scripts/site-footer.mjs`, embedded byte for byte in `index.html` just before `</body>`, outside `#root` (a declarative shadow root renders only when the browser parses it). `src/__tests__/site-footer.test.js` pins its sha256; when the footer changes, copy the new markup in and update the hash.
+- **Analytics:** `public/hw-events.js` is the platform's cookieless analytics script, copied unchanged (`src/__tests__/analytics.test.js` pins its sha256), with its tag in `<head>`. The tag's `data-mask="/vote/ /results/ /admin/"` sends a contest's address as `/vote/:id`, never its voting code. It sends the pages viewed, time on screen, the referring site, outbound links and script errors; never a ballot, a comment or an email address. No cookie, nothing kept in the browser, and nothing sent under Do Not Track or Global Privacy Control. Visitors read the same in the privacy note (`src/components/PrivacyNote.jsx`) on the sign-in page and the ballot.
+- **Favicon:** the HintWise icon (an inline SVG in `index.html`).
 
 ## Security Notes
 
