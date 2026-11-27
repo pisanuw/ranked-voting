@@ -61,13 +61,14 @@ describe('the schema', () => {
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = $1 order by p.proname`, [S])
     const byName = Object.fromEntries(r.rows.map((f) => [f.proname, f]))
     expect(Object.keys(byName)).toEqual([
-      'contest_ballots', 'contest_feedback', 'contest_voters', 'create_contest_with_relations',
-      'get_contest', 'my_voter_contests', 'submit_vote',
+      'contest_ballots', 'contest_feedback', 'contest_voters', 'contests_stay_out_of_draft',
+      'create_contest_with_relations', 'get_contest', 'my_voter_contests', 'submit_vote',
     ])
     for (const f of r.rows) expect(f.proconfig, f.proname).toContain('search_path=""')
     expect(byName.create_contest_with_relations.prosecdef).toBe(false)
+    expect(byName.contests_stay_out_of_draft.prosecdef).toBe(false)
     expect(r.rows.filter((f) => f.anon).map((f) => f.proname)).toEqual(['contest_ballots', 'get_contest', 'submit_vote'])
-    expect(r.rows.every((f) => f.authed)).toBe(true)
+    expect(r.rows.filter((f) => !f.authed).map((f) => f.proname)).toEqual(['contests_stay_out_of_draft'])
   })
 
   it('makes 32-hex voting codes', async () => {
@@ -119,6 +120,31 @@ describe('creating and managing a contest', () => {
     expect(await code(as(db, admin, (tx) => tx.query(`insert into ${S}.contests (admin_id, title) values ($1, 'Theirs')`, [other])))).toBe('42501')
   })
 
+  it('never moves a contest back to draft once it has left it', async () => {
+    const admin = await addUser(db, 'admin4b@example.org')
+    const c = await makeContest(admin, { open: false })
+    const setStatus = (status) => as(db, admin, (tx) => tx.query(`update ${S}.contests set status = $2 where id = $1`, [c.id, status]))
+    // Edits to a draft, including writing 'draft' again, are fine.
+    expect(await code(as(db, admin, (tx) => tx.query(`update ${S}.contests set title = 'Still a draft' where id = $1`, [c.id])))).toBeNull()
+    expect(await code(setStatus('draft'))).toBeNull()
+    expect(await code(setStatus('open'))).toBeNull()
+    expect(await code(setStatus('draft'))).toBe('PT400')
+    expect(await code(setStatus('closed'))).toBeNull()
+    expect(await code(setStatus('draft'))).toBe('PT400')
+    expect((await db.query(`select status from ${S}.contests where id = $1`, [c.id])).rows[0].status).toBe('closed')
+  })
+
+  it('keeps a ballot\'s options: no way back to draft, so no option can be removed after voting', async () => {
+    const admin = await addUser(db, 'admin4c@example.org')
+    const c = await makeContest(admin)
+    expect(await code(vote(null, c, { token: 'draft-token-4c' }))).toBeNull()
+    expect(await code(as(db, admin, (tx) => tx.query(`update ${S}.contests set status = 'draft' where id = $1`, [c.id])))).toBe('PT400')
+    const del = await as(db, admin, (tx) => tx.query(`delete from ${S}.contest_options where id = $1`, [c.options[0].id]))
+    expect(del.affectedRows).toBe(0)
+    const ranks = await db.query(`select count(*)::int as n from ${S}.vote_rankings vr join ${S}.votes v on v.id = vr.vote_id where v.contest_id = $1`, [c.id])
+    expect(ranks.rows[0].n).toBe(3)
+  })
+
   it('changes options only while the contest is a draft', async () => {
     const admin = await addUser(db, 'admin4@example.org')
     const c = await makeContest(admin, { open: false })
@@ -146,6 +172,16 @@ describe('get_contest', () => {
     expect(await rpc(db, null, `${S}.get_contest($1)`, ['0'.repeat(32)])).toBeNull()
     const open = await makeContest(admin)
     expect((await rpc(db, null, `${S}.get_contest($1)`, [open.vote_token])).require_login).toBe(false)
+  })
+
+  it('reads no code longer than 128 characters, in any of the code functions', async () => {
+    const long = 'a'.repeat(129)
+    expect(await rpc(db, null, `${S}.get_contest($1)`, [long])).toBeNull()
+    expect(await code(rpc(db, null, `${S}.submit_vote($1, '[]'::jsonb, null, 'browser-token-long')`, [long]))).toBe('PT404')
+    expect(await code(rpc(db, null, `${S}.submit_vote(null, '[]'::jsonb, null, 'browser-token-long')`))).toBe('PT404')
+    expect(await code(rpc(db, null, `${S}.contest_ballots($1, null)`, [long]))).toBe('PT404')
+    expect(await code(rpc(db, null, `${S}.contest_ballots(null, null)`))).toBe('PT404')
+    expect(await rpc(db, null, `${S}.get_contest($1)`, ['a'.repeat(128)])).toBeNull()
   })
 })
 
@@ -241,8 +277,8 @@ describe('submit_vote', () => {
     const v = async (comments, n) => code(vote(null, c, { comments: JSON.stringify(comments), token: `comment-token-${n}` }))
     expect(await v(all().slice(0, 2), 1)).toBe('PT400')
     expect(await v([...all().slice(0, 2), { option_id: cc, comment: '   ' }], 2)).toBe('PT400')
-    expect(await v([...all(), { option_id: a, comment: 'again' }], 3)).toBe('PT400')
-    expect(await v([...all(), { option_id: other.options[0].id, comment: 'elsewhere' }], 4)).toBe('PT400')
+    expect(await v([{ option_id: a, comment: 'one' }, { option_id: a, comment: 'again' }, { option_id: cc, comment: 'fine' }], 3)).toBe('PT400')
+    expect(await v([{ option_id: a, comment: 'one' }, { option_id: b, comment: 'two' }, { option_id: other.options[0].id, comment: 'elsewhere' }], 4)).toBe('PT400')
     expect(await v(all('x'.repeat(2001)), 5)).toBe('PT400')
     expect(await v([{ option_id: a, comment: 7 }], 6)).toBe('PT400')
     expect(await code(vote(null, c, { comments: null, token: 'comment-token-7' }))).toBe('PT400')
@@ -251,11 +287,18 @@ describe('submit_vote', () => {
     const kept = await db.query(`select comment from ${S}.vote_comments vc join ${S}.votes v on v.id = vc.vote_id where v.voter_token = 'comment-token-9'`)
     expect(kept.rows.map((r) => r.comment)).toEqual(['padded', 'padded', 'padded'])
 
+    // No more entries than options, blank or not, before any entry is read.
+    expect(await v([...all(), { option_id: a, comment: ' ' }], 11)).toBe('PT400')
+    expect(await v(Array.from({ length: 20000 }, () => ({ option_id: a, comment: ' ' })), 12)).toBe('PT400')
+
     const optional = await makeContest(admin)
     const [oa] = optional.options.map((o) => o.id)
     expect(await code(vote(null, optional, { comments: JSON.stringify([{ option_id: oa, comment: 'only one' }, { option_id: optional.options[1].id, comment: ' ' }]), token: 'comment-token-10' }))).toBeNull()
     const n = await db.query(`select count(*)::int as n from ${S}.vote_comments vc join ${S}.votes v on v.id = vc.vote_id where v.voter_token = 'comment-token-10'`)
     expect(n.rows[0].n).toBe(1)
+    const blanks = optional.options.map((o) => ({ option_id: o.id, comment: ' ' }))
+    expect(await code(vote(null, optional, { comments: JSON.stringify(blanks), token: 'comment-token-13' }))).toBeNull()
+    expect(await code(vote(null, optional, { comments: JSON.stringify([...blanks, blanks[0]]), token: 'comment-token-14' }))).toBe('PT400')
   })
 })
 
@@ -357,19 +400,61 @@ describe('my_voter_contests', () => {
 })
 
 describe('account deletion', () => {
-  it('keeps a deleted voter\'s ballot in the count without them, and removes a deleted admin\'s contests', async () => {
+  it('takes a deleted voter\'s ballots, rankings and comments with the account', async () => {
     const admin = await addUser(db, 'admin17@example.org')
     const voter = await addUser(db, 'voter17@example.org')
     const c = await makeContest(admin)
-    await vote(voter, c)
+    await vote(voter, c, { comments: JSON.stringify([{ option_id: c.options[0].id, comment: 'Mine' }]) })
+    await vote(null, c, { token: 'deletion-token-17' })
     await db.query('delete from auth.users where id = $1', [voter])
-    const kept = await db.query(`select voter_id, voter_token from ${S}.votes where contest_id = $1`, [c.id])
-    expect(kept.rows).toEqual([{ voter_id: null, voter_token: null }])
+    const left = await db.query(`select voter_id, voter_token from ${S}.votes where contest_id = $1`, [c.id])
+    expect(left.rows).toEqual([{ voter_id: null, voter_token: 'deletion-token-17' }])
+    const comments = await db.query(`select count(*)::int as n from ${S}.vote_comments vc join ${S}.contest_options o on o.id = vc.option_id where o.contest_id = $1`, [c.id])
+    expect(comments.rows[0].n).toBe(0)
+    const rankings = await db.query(`select count(*)::int as n from ${S}.vote_rankings vr join ${S}.contest_options o on o.id = vr.option_id where o.contest_id = $1`, [c.id])
+    expect(rankings.rows[0].n).toBe(3)
     expect((await rpc(db, admin, `${S}.contest_ballots($1, null)`, [c.vote_token])).ballots).toHaveLength(1)
+  })
+
+  it('never holds two ballots for one listed address: a returning voter votes again only because the first ballot is gone', async () => {
+    const admin = await addUser(db, 'admin18@example.org')
+    const c = await makeContest(admin, { emails: ['v18@example.org'] })
+    const ballots = async () => (await db.query(`select count(*)::int as n from ${S}.votes where contest_id = $1`, [c.id])).rows[0].n
+    const first = await addUser(db, 'v18@example.org')
+    expect(await code(vote(first, c))).toBeNull()
+    expect(await code(vote(first, c))).toBe('PT409')
+    // What "Delete my account" does: platform.delete_hintwise_data deletes the rows whose key
+    // cascades, then the Auth admin API deletes the sign-in (which would cascade anyway).
+    await db.query(`delete from ${S}.votes where voter_id = $1`, [first])
+    await db.query('delete from auth.users where id = $1', [first])
+    expect(await ballots()).toBe(0)
+    const again = await addUser(db, 'v18@example.org') // same address, new account
+    expect(await code(vote(again, c))).toBeNull()
+    expect(await ballots()).toBe(1)
+    expect(await code(vote(again, c))).toBe('PT409')
+    expect(await ballots()).toBe(1)
+    // Deleting the sign-in alone (no platform step first) cascades the same way.
+    await db.query('delete from auth.users where id = $1', [again])
+    expect(await ballots()).toBe(0)
+  })
+
+  it('removes a deleted admin\'s contests with everything under them', async () => {
+    const admin = await addUser(db, 'admin19@example.org')
+    const c = await makeContest(admin)
+    await vote(null, c, { token: 'deletion-token-19' })
     await db.query('delete from auth.users where id = $1', [admin])
     for (const table of ['contests', 'contest_options', 'votes']) {
       const left = await db.query(`select count(*)::int as n from ${S}.${table} where ${table === 'contests' ? 'id' : 'contest_id'} = $1`, [c.id])
       expect(left.rows[0].n, table).toBe(0)
     }
+  })
+
+  it('keeps every ballot either a signed-in voter\'s or an anonymous browser\'s, never both or neither', async () => {
+    const admin = await addUser(db, 'admin20@example.org')
+    const voter = await addUser(db, 'voter20@example.org')
+    const c = await makeContest(admin)
+    const insert = (voterId, token) => db.query(`insert into ${S}.votes (contest_id, voter_id, voter_token) values ($1, $2, $3)`, [c.id, voterId, token])
+    expect(await code(insert(null, null))).toBe('23514')
+    expect(await code(insert(voter, 'browser-token-20'))).toBe('23514')
   })
 })
