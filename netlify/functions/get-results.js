@@ -1,4 +1,10 @@
-const { createClient } = require('@supabase/supabase-js')
+// get-results.js
+// The step-by-step STV count for a contest (GET ?token=), for its admin always, and for
+// voters after they voted when the admin shows results to voters. The ballots come from
+// app_ranked_voting.contest_ballots, called as the caller (their access token, or anonymous
+// with the browser's voter token in X-Voter-Token): a security definer function that checks
+// who may see them and hands them over without vote ids, in random order. No service-role key.
+const { appClient, bearer, messageFor, statusFor } = require('./_lib/supabase')
 
 // ── STV (Single Transferable Vote) Algorithm ─────────────────────────────────
 // Implements proper ranked-choice voting with:
@@ -109,137 +115,85 @@ exports.runIRV = runIRV
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const supabaseAdmin = () =>
-  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+const VOTE_TOKEN = /^[A-Za-z0-9_-]{8,128}$/
+const MAX_VOTER_TOKEN_CHARS = 100
 
-async function getAuthenticatedUser(authToken) {
-  if (!authToken) return null
-
-  const authClient = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${authToken}` } } }
-  )
-
-  const { data: { user } } = await authClient.auth.getUser()
-  return user ?? null
+/** contest_ballots' ballots (option ids in rank order) in the shape runIRV reads. */
+function toVotes(ballots) {
+  return (Array.isArray(ballots) ? ballots : []).map(ids => ({
+    vote_rankings: (Array.isArray(ids) ? ids : []).map((option_id, i) => ({ option_id, rank: i + 1 })),
+  }))
 }
 
-exports.handler = async (event) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Voter-Token',
-  }
+const headers = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Voter-Token',
+}
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers }
-  }
-  if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
-  }
-
-  const token = event.queryStringParameters?.token
-  const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
-  const authToken = authHeader.replace('Bearer ', '').trim() || null
-  const anonymousVoterToken = event.headers['x-voter-token'] ?? event.headers['X-Voter-Token'] ?? null
-
-  if (!token) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing token parameter' }) }
-  }
-
-  const db = supabaseAdmin()
-
-  // ── Load contest ──────────────────────────────────────────────────────
-  const { data: contest, error: cErr } = await db
-    .from('contests')
-    .select('*, contest_options(*)')
-    .eq('vote_token', token)
-    .single()
-
-  if (cErr || !contest) {
-    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contest not found' }) }
-  }
-
-  // ── Authorization ─────────────────────────────────────────────────────
-  // Admin-only results: only the admin may view.
-  // Voter-visible results: admin may always view; everyone else must prove they voted.
-  const user = await getAuthenticatedUser(authToken)
-  const isAdmin = user?.id === contest.admin_id
-
-  if (!contest.results_visible_to_voters && !isAdmin) {
-    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are restricted to the contest admin' }) }
-  }
-
-  if (contest.results_visible_to_voters && !isAdmin) {
-    let voterQuery = null
-
-    if (user?.id) {
-      voterQuery = db
-        .from('votes')
-        .select('id')
-        .eq('contest_id', contest.id)
-        .eq('voter_id', user.id)
-        .maybeSingle()
-    } else if (anonymousVoterToken) {
-      voterQuery = db
-        .from('votes')
-        .select('id')
-        .eq('contest_id', contest.id)
-        .eq('voter_token', anonymousVoterToken)
-        .maybeSingle()
+function makeHandler({ client = appClient } = {}) {
+  return async (event) => {
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers }
+    }
+    if (event.httpMethod !== 'GET') {
+      return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) }
     }
 
-    if (!voterQuery) {
-      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are only available to recorded voters or the contest admin' }) }
+    const token = event.queryStringParameters?.token
+    if (!token) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing token parameter' }) }
+    }
+    if (!VOTE_TOKEN.test(token)) {
+      return { statusCode: 404, headers, body: JSON.stringify({ error: 'Contest not found' }) }
     }
 
-    const { data: recordedVote } = await voterQuery
-    if (!recordedVote) {
-      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Results are only available to recorded voters or the contest admin' }) }
+    const rawVoterToken = event.headers?.['x-voter-token'] ?? event.headers?.['X-Voter-Token'] ?? null
+    const voterToken = typeof rawVoterToken === 'string' && rawVoterToken.length <= MAX_VOTER_TOKEN_CHARS ? rawVoterToken : null
+
+    const { data, error } = await client(bearer(event)).rpc('contest_ballots', { p_token: token, p_voter_token: voterToken })
+    if (error) {
+      const status = statusFor(error)
+      if (status >= 500) console.error('contest_ballots failed:', error.code, error.message)
+      return { statusCode: status, headers, body: JSON.stringify({ error: messageFor(error, status, 'Failed to fetch votes') }) }
     }
-  }
 
-  // ── Fetch votes ───────────────────────────────────────────────────────
-  const { data: votes, error: vErr } = await db
-    .from('votes')
-    .select('id, vote_rankings(option_id, rank)')
-    .eq('contest_id', contest.id)
+    const contest = data?.contest ?? {}
+    const options = [...(data?.options ?? [])].sort((a, b) => a.order_index - b.order_index)
+    const votes = toVotes(data?.ballots)
+    const total_votes = votes.length
 
-  if (vErr) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to fetch votes' }) }
-  }
+    if (total_votes === 0) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          contest: { title: contest.title, max_winners: contest.max_winners },
+          options,
+          total_votes: 0,
+          rounds:      [],
+          winners:     [],
+        }),
+      }
+    }
 
-  const total_votes = votes?.length ?? 0
-  const options     = (contest.contest_options ?? []).sort((a, b) => a.order_index - b.order_index)
+    const { winners, rounds, quota } = runIRV(votes, options, contest.max_winners)
 
-  if (total_votes === 0) {
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        contest:     { title: contest.title, max_winners: contest.max_winners },
+        contest: { title: contest.title, max_winners: contest.max_winners },
         options,
-        total_votes: 0,
-        rounds:      [],
-        winners:     [],
+        total_votes,
+        quota,
+        rounds,
+        winners,
       }),
     }
   }
-
-  // ── Run STV ───────────────────────────────────────────────────────────
-  const { winners, rounds, quota } = runIRV(votes, options, contest.max_winners)
-
-  return {
-    statusCode: 200,
-    headers,
-    body: JSON.stringify({
-      contest: { title: contest.title, max_winners: contest.max_winners },
-      options,
-      total_votes,
-      quota,
-      rounds,
-      winners,
-    }),
-  }
 }
+
+exports.toVotes = toVotes
+exports.makeHandler = makeHandler
+exports.handler = makeHandler()
