@@ -10,6 +10,9 @@
 # old VITE_SUPABASE_* variables, which name the deleted project. The functions carry the same
 # two values in netlify/functions/_lib/supabase.js (functions do not see this section).
 [build.environment]
+  # Node 20 or later (package.json engines; supabase-js needs it). Netlify runs the functions on
+  # the build's Node version by default.
+  NODE_VERSION = "22"
   VITE_SUPABASE_URL = "https://auth.hintwise.org"
   VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFya3R4bHJseWNlZmZ5b3pkd2hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4ODEwMTAsImV4cCI6MjA5MjQ1NzAxMH0.Vuku-irT3kAHZYibK23q6dpyOEqV_Eg5zB78I3dyshE"
 

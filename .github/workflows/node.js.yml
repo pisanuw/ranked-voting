@@ -16,8 +16,9 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        node-version: [20.x, 22.x]
+        # Node 18 reached end of life in April 2025, and supabase-js needs Node 20 or later
+        # (package.json engines). See https://nodejs.org/en/about/releases/
 
     steps:
     - uses: actions/checkout@v4
