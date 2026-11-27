@@ -1,43 +1,28 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/db'
+import { onAuth, signOut as hintwiseSignOut } from '../lib/auth'
 
+// Who is signed in, for the pages. Signing in happens in the HintWise sign-in controls
+// (components/SignIn.jsx, the template's mountSignIn): Google, or a 6-digit code by email
+// through the platform's sign-in-link function. Never supabase.auth.signInWithOtp: the shared
+// project's email hook refuses it for hintwise.org pages.
 const AuthContext = createContext(null)
 
-export function AuthProvider({ children }) {
+export function AuthProvider({ children, client = supabase }) {
   const [user, setUser]       = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    // Grab initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+  useEffect(() => onAuth((nextUser) => {
+    setUser(nextUser)
+    setLoading(false)
+  }, client), [client])
 
-    // Listen for auth changes (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const signInWithGoogle = (redirectTo) =>
-    supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: redirectTo ?? `${window.location.origin}/dashboard` },
-    })
-
-  const signInWithMagicLink = (email, redirectTo) =>
-    supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo ?? `${window.location.origin}/dashboard` },
-    })
-
-  const signOut = () => supabase.auth.signOut()
+  // This app only: every HintWise app shares one sign-in, and a global sign-out would end the
+  // person's session in all of them.
+  const signOut = () => hintwiseSignOut(client)
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithMagicLink, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   )

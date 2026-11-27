@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
-import { supabaseConfigError } from './lib/supabase'
+import { supabaseConfigError } from './lib/db'
 import './index.css'
 
 function MissingConfigScreen() {

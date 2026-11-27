@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/db'
 import { formatDistanceToNow, format } from 'date-fns'
 
 const STATUS_COLORS = {
@@ -42,18 +42,18 @@ export default function AdminContest() {
 
     if (cErr || !c) { setLoadError('Contest not found or access denied.'); setLoading(false); return }
 
-    const [{ data: opts }, { data: avs }, { count }, { data: voteRows }] = await Promise.all([
+    // Who voted and when (never how) comes from contest_voters: the admin reads no vote row.
+    const [{ data: opts }, { data: avs }, { data: voteRows }] = await Promise.all([
       supabase.from('contest_options').select('*').eq('contest_id', id).order('order_index'),
       supabase.from('allowed_voters').select('*').eq('contest_id', id).order('email'),
-      supabase.from('votes').select('id', { count: 'exact', head: true }).eq('contest_id', id),
-      supabase.from('votes').select('id, voter_id, voter_token, created_at, profiles(email)').eq('contest_id', id).order('created_at'),
+      supabase.rpc('contest_voters', { p_contest_id: id }),
     ])
 
     setContest(c)
     setOptions(opts ?? [])
     setAllowed(avs ?? [])
     setVoters(voteRows ?? [])
-    setVoteCount(count ?? 0)
+    setVoteCount(voteRows?.length ?? 0)
     setEditData({
       title:                     c.title,
       description:               c.description ?? '',
@@ -290,13 +290,13 @@ export default function AdminContest() {
             <h2 className="font-semibold text-slate-800">Who Voted</h2>
             <p className="text-xs text-slate-400">Shows who submitted a ballot (not how they voted).</p>
             <ul className="divide-y divide-slate-100">
-              {voters.map(v => (
-                <li key={v.id} className="flex items-center justify-between py-1.5 text-sm">
+              {voters.map((v, i) => (
+                <li key={i} className="flex items-center justify-between py-1.5 text-sm">
                   <span className="text-slate-700">
-                    {v.profiles?.email ?? 'Anonymous'}
+                    {v.email ?? 'Anonymous'}
                   </span>
                   <span className="text-xs text-slate-400">
-                    {new Date(v.created_at).toLocaleString()}
+                    {new Date(v.voted_at).toLocaleString()}
                   </span>
                 </li>
               ))}
@@ -441,7 +441,7 @@ export default function AdminContest() {
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <SettingRow label="Winners" value={contest.max_winners} />
               <SettingRow label="End Date" value={contest.end_date ? format(new Date(contest.end_date), 'PPp') : 'None'} />
-              <SettingRow label="Login Required" value={contest.require_login ? 'Yes (voter whitelist active)' : 'No (URL is enough)'} />
+              <SettingRow label="Login Required" value={allowed.length > 0 ? 'Yes (voter whitelist active)' : 'No (URL is enough)'} />
               <SettingRow label="Results Visible" value={contest.results_visible_to_voters ? 'All voters' : 'Admin only'} />
               <SettingRow label="Randomize" value={contest.randomize_options ? 'Yes (per voter)' : 'No'} />
               <SettingRow label="Comments" value={contest.comments_required ? 'Required for every option' : 'Optional'} />

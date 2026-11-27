@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/db'
+import SignIn from '../components/SignIn'
 import { formatDistanceToNow } from 'date-fns'
 
 const STATUS_COLORS = {
@@ -11,7 +12,7 @@ const STATUS_COLORS = {
 }
 
 export default function Dashboard() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const [contests, setContests]         = useState([])
   const [voterContests, setVoterContests] = useState([])
   const [loading, setLoading]           = useState(true)
@@ -52,10 +53,8 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 text-lg font-bold text-brand-700">
           <span>🗳️</span> RankedVote
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-500 hidden sm:block">{user.email}</span>
-          <button onClick={signOut} className="btn-ghost text-sm">Sign out</button>
-        </div>
+        {/* The person, with "Delete my account", and "Sign out" (HintWise sign-in controls). */}
+        <SignIn />
       </nav>
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
