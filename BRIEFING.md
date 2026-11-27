@@ -13,15 +13,16 @@ A web app for running ranked-choice (STV/IRV) elections. Admins create contests 
 - Moved to the shared HintWise project on 27 Nov 2026 (owner, "rv to shared", "3 now"); the old project (iatqephvmykbkatpbwll) was deleted, nothing carried over
 - Voter-facing reads and writes go through security definer functions (get_contest, submit_vote, contest_ballots; anon may execute only these), called by the Netlify functions with the anon key and the caller's token; no enumeration, no service-role key
 - Admin reads and writes use the Supabase client with RLS (their token); options change only while a contest is a draft; who voted comes from contest_voters, comments from contest_feedback
-- Nobody reads a ballot next to a voter's identity (rankings and comments only through functions, without vote ids, random order)
+- Ballots and comments are never returned with a voter's identity (rankings and comments only through functions, without vote ids, random order); an admin who watches results during voting can still infer how an individual voted
 - No profiles table: voter addresses are read from auth.users inside contest_voters and submit_vote
-- Account deletion: an admin's contests go with the account; a voter's ballots stay in the count with voter_id set to null
+- Account deletion: an admin's contests go with the account; a voter's ballots, rankings and comments go too (votes.voter_id cascades), so a listed address never holds two ballots at once
+- A contest that has left draft never goes back to draft (trigger contests_stay_out_of_draft), so options never change under ballots
 - Voting is URL-gated by default; login only required when a voter whitelist exists
 - Whitelist (`allowed_voters`) entries are either a full email or a domain rule beginning with `@` (e.g. `@uw.edu`); matched in the database function submit_vote (the part after the last @)
 - STV algorithm (Droop quota, fractional surplus redistribution) runs server-side in get-results function, on contest_ballots
 - Ballot option order is shuffled once per user and persisted to localStorage (not re-shuffled on re-renders)
 - Voter comments are stored per-option, downloadable by admin as CSV/Markdown (anonymous, no voter identity)
-- Admins can see who voted (email + timestamp) but not how they voted
+- Admins can see who voted (email + timestamp); the list does not show how they voted
 - Post-login redirect returns user to the contest voting page they came from
 - Dashboard shows both admin contests and contests the user can vote in
 - Submission gate: `contests.submissions_open` (default false) lets voters rank + comment while a contest is open but blocks the actual submit until the owner opens submissions (toggle on AdminContest, enforced in submit-vote)

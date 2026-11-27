@@ -15,7 +15,7 @@ A full-stack ranked-choice voting web app. Admins create contests, invite voters
 - Toggle per-voter option randomization (each voter sees candidates in a different order)
 - Control whether results are visible to all voters or admin-only
 - Share a unique voting URL (token-based, not the contest ID) with participants
-- See who voted (not how) and download anonymous per-option comments as CSV or Markdown
+- See who voted and when (the list does not show how) and download per-option comments, without voter names, as CSV or Markdown
 
 ### For Voters
 - Drag-and-drop ballot to rank all candidates in order of preference
@@ -52,11 +52,11 @@ RankedVote's data lives in the shared HintWise Supabase project (`https://auth.h
 | `get_contest(code)` | anyone with the voting code | one open or closed contest and its options; never a draft, the admin or a ballot |
 | `submit_vote(code, rankings, comments, browser token)` | voters, signed in or anonymous | checks the contest is open, the submission gate, the end date, the voter list (full addresses and `@domain` rules), every option ranked once, required comments and one ballot per voter, then records it |
 | `contest_ballots(code, browser token)` | the admin; voters after voting, when results are shown to voters | the ballots as option ids in rank order, in random order, without vote ids |
-| `contest_voters(contest)` | the admin | who voted (address, or anonymous) and when, never how |
+| `contest_voters(contest)` | the admin | who voted (address, or anonymous) and when, not how |
 | `contest_feedback(contest)` | the admin | the comments with their option and each option's average rank, without the ballot they came with |
 | `my_voter_contests()` | signed-in people | contests they voted in or whose voter list names their address |
 
-`create_contest_with_relations` (contest, options and voter list in one transaction) runs as the caller, so row level security applies to it like any other write. Nobody, the admin included, can read a ballot next to the voter's identity.
+`create_contest_with_relations` (contest, options and voter list in one transaction) runs as the caller, so row level security applies to it like any other write. Ballots and comments are never returned with a voter's identity; an admin who watches the results while voting is under way can still infer how an individual voted (the newest ballot belongs to the newest name under "Who Voted").
 
 ```
 netlify/functions/
@@ -108,7 +108,7 @@ All in schema `app_ranked_voting` (`supabase/migrations/0001_app_ranked_voting.s
 - **vote_rankings** — the ranked ballot, one row per option per vote
 - **vote_comments** — optional per-option feedback (anonymous to admins), up to 2000 characters each
 
-What is stored about a person: their sign-in (address) in the shared HintWise account; the contests they create; their ballots and comments, linked to their account only to stop a second ballot. Deleting an account deletes the contests it created (with their ballots); the person's ballots in other people's contests stay in the count without them. Data is in Supabase, US East.
+What is stored about a person: their sign-in (address) in the shared HintWise account; the contests they create; their ballots and comments, linked to their account only to stop a second ballot. Deleting an account deletes the contests it created (with their ballots) and the person's own ballots and comments in other people's contests, so those results count one ballot fewer; signing in again with the same address, the person may vote once more while a contest is open. Data is in Supabase, US East.
 
 ## Local Development
 
@@ -150,4 +150,4 @@ RankedVote is a HintWise app in its own repository (claude-built-apps `docs/new-
 - No service-role key exists anywhere in this app: not in the browser, the functions or the site's settings.
 - Contests are not readable with the anon key. A contest is reached only through `get_contest` with its exact voting code, so contests cannot be enumerated, and drafts are never shown.
 - Every table has row level security. Admins reach only their own contests, options and voter lists; voters only their own vote row; nobody reads rankings or comments directly.
-- The admin sees who voted and when, never how: ballots and comments come out only without vote ids and in random order.
+- The admin sees who voted and when. Ballots and comments come out only without vote ids and in random order, so they are never returned with a voter's identity; an admin who watches the results while voting is under way can still infer how an individual voted.

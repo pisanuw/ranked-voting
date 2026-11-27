@@ -42,7 +42,7 @@ export default function AdminContest() {
 
     if (cErr || !c) { setLoadError('Contest not found or access denied.'); setLoading(false); return }
 
-    // Who voted and when (never how) comes from contest_voters: the admin reads no vote row.
+    // Who voted and when (not how) comes from contest_voters: the admin reads no vote row.
     const [{ data: opts }, { data: avs }, { data: voteRows }] = await Promise.all([
       supabase.from('contest_options').select('*').eq('contest_id', id).order('order_index'),
       supabase.from('allowed_voters').select('*').eq('contest_id', id).order('email'),
