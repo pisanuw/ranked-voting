@@ -37,3 +37,17 @@
     @apply space-y-1;
   }
 }
+
+/* The HintWise sign-in controls (components/SignIn.jsx) in a card rather than at the right of a
+   top bar: the buttons and their panel centred under the card's heading. The template's styles
+   (src/lib/signin-styles.ts) come first in <head>, so these override its layout only. */
+.rv-signin-inline.hw-signin {
+  justify-content: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+.rv-signin-inline .hw-signin-panel {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}

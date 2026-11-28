@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -20,8 +23,10 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "jsdom": "25.0.1",
     "pg": "^8.20.0",
     "postcss": "^8.4.45",
     "supabase": "^2.93.0",
